@@ -18,6 +18,8 @@ public class MaterialNode : MonoBehaviour, IInteractable
     public int amount = 2;
     [Tooltip("Seconds to grow back after it's used up.")]
     public float regrowTime = 35f;
+    [Tooltip("How close you need to be to gather (bigger for big crystals / scrap piles).")]
+    public float range = 2.6f;
 
     int left;
     float regrowAt = -1f;
@@ -30,7 +32,7 @@ public class MaterialNode : MonoBehaviour, IInteractable
     public int Left => left;
     public float RegrowIn => regrowAt > 0f ? Mathf.Max(0f, regrowAt - Time.time) : -1f;
     public Vector3 InteractPoint => transform.position + Vector3.up * 0.6f;
-    public float InteractRange => 2.6f;
+    public float InteractRange => range;
 
     void Awake()
     {

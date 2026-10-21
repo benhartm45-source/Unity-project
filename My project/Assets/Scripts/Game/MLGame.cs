@@ -56,11 +56,33 @@ public class MLGame : MonoBehaviour
         go.AddComponent<GameHUD>();
         go.AddComponent<NetPlayers>();
         go.AddComponent<NetNodes>();
+        MakeBigPropsGatherable();
         GameCam.Ensure();
         if (!ArenaPresent && GameCam.I != null)
         {
             // no arena yet: keep the plain dark menu background
             GameCam.I.enabled = false;
+        }
+    }
+
+    // The big crystal clusters, crystal spires, scrap piles and toxic barrels on the map look just like
+    // material spots, so they can be gathered too (more crystals / metal / chemicals each time).
+    static void MakeBigPropsGatherable()
+    {
+        foreach (MeshRenderer r in FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
+        {
+            GameObject g = r.gameObject;
+            if (g.GetComponent<MaterialNode>() != null || r.GetComponentInParent<Laboratory>() != null) continue;
+            string n = g.name;
+            Mat m; float range;
+            if (n.StartsWith("Crystal_Spire")) { m = Mat.Crystal; range = 4f; }
+            else if (n.StartsWith("Crystal_Cluster")) { m = Mat.Crystal; range = 3.4f; }
+            else if (n.StartsWith("Scrap_Pile")) { m = Mat.Metal; range = 3.6f; }
+            else if (n.StartsWith("Barrel_Toxic") || n.StartsWith("Barrel_Group")) { m = Mat.Chemical; range = 2.8f; }
+            else continue;
+            var node = g.AddComponent<MaterialNode>();
+            node.mat = m;
+            node.range = range;
         }
     }
 

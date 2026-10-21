@@ -228,9 +228,14 @@ public class GameHUD : MonoBehaviour
             case 1: howTo = true; break;
             case 2: Settings.FirstPerson = !Settings.FirstPerson; Settings.Save(); break;
             case 3: SkipPhase(); SetPause(false); break;
+<<<<<<< HEAD
             case 4: GiveTestMaterials(); break;
             case 5: SetPause(false); MLGame.StartMatch(Player.Local != null ? Player.Local.labIndex : 0); break;
             case 6: SetPause(false); MLGame.I.EndMatch(); break;
+=======
+            case 4: { SetPause(false); int lab = Player.Local != null ? Player.Local.labIndex : 0; LoadingScreen.Run("RESTARTING THE EXPERIMENT", () => MLGame.StartMatch(lab)); break; }
+            case 5: SetPause(false); MLGame.I.EndMatch(); break;
+>>>>>>> cc6621aa3b8d945e993175c7eb2b3c9a780eabba
         }
     }
 
@@ -239,7 +244,7 @@ public class GameHUD : MonoBehaviour
         Sfx.Play("tick", 0.5f);
         int lab = Player.Local != null ? Player.Local.labIndex : 0;
         endShown = false;
-        if (row == 0) MLGame.StartMatch(lab);
+        if (row == 0) LoadingScreen.Run("NEW EXPERIMENT", () => MLGame.StartMatch(lab));
         else MLGame.I.EndMatch();
     }
 

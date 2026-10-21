@@ -91,7 +91,7 @@ public partial class Player : MonoBehaviour, IDamageable
     {
         float dt = Time.deltaTime;
         if (dt <= 0f) return;
-        bool control = MLGame.Playing && !GameHUD.UIOpen && !dead;
+        bool control = MLGame.Playing && !GameHUD.UIOpen && !dead && !LoadingScreen.Active;
 
         if (dead)
         {
