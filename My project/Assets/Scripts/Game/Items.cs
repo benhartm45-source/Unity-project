@@ -34,6 +34,9 @@ public enum ItemId
     ScrapArmor, CrystalArmor, BounceBoots,
     FireEnchant, IceEnchant, PoisonEnchant,
     WallsI, WallsII, Forcefield, Turret, SlimeTraps, Repair, FastBrew,
+    // more guns (stats in Guns.cs) - always add new things at the END so saved discoveries stay right
+    BerryBlaster, WoodPistol, SapSprayer, SporeGun, MossMusket, PetalPopper, CoalCannon, IronRifle, GoldRevolver, SulfurFlamer,
+    GlowstoneLaser, UraniumRailgun, ObsidianShotgun, CircuitBlaster, CopperCoil, BatterySMG, GlassSniper, PlasticSquirter, MeteorLauncher, StarShooter,
 }
 
 public class Recipe
@@ -100,12 +103,26 @@ public static class Items
         "crystal", "crystal",
     };
 
-    // Recipe costs only use the first five materials for now; everything else is 0.
+    // Costs: C(herb: 2, metal: 1) for the first five materials...
     static int[] C(int herb = 0, int slime = 0, int crystal = 0, int metal = 0, int chem = 0)
     {
         var c = new int[MatCount];
         c[0] = herb; c[1] = slime; c[2] = crystal; c[3] = metal; c[4] = chem;
         return c;
+    }
+
+    // ...or Cost(Mat.Berry, 3, Mat.Metal, 1) for any materials (pairs of material, how many).
+    static int[] Cost(params object[] pairs)
+    {
+        var c = new int[MatCount];
+        for (int i = 0; i + 1 < pairs.Length; i += 2) c[(int)(Mat)pairs[i]] += (int)pairs[i + 1];
+        return c;
+    }
+
+    static Recipe Gun(ItemId id, string name, string desc, int[] cost, float time, string icon)
+    {
+        GunDef g = Guns.Get(id);
+        return new Recipe { id = id, name = name, kind = ItemKind.Weapon, station = Station.Workbench, cost = cost, time = time, desc = desc, color = g != null ? g.color : Color.white, icon = icon };
     }
 
     public static readonly Recipe[] All =
@@ -163,6 +180,29 @@ public static class Items
             desc = "Fix 400 HP of damage.", color = new Color(0.4f, 1f, 0.4f), icon = "up_repair" },
         new Recipe { id = ItemId.FastBrew, name = "Second Cauldron", kind = ItemKind.Upgrade, station = Station.Terminal, cost = C(herb: 1, metal: 2, chem: 1), time = 2f,
             desc = "Brew two potions at once, 30% faster.", color = new Color(0.8f, 0.5f, 1f), icon = "up_brew" },
+
+        // ---------------- More guns (Workbench) - stats in Guns.cs ----------------
+        Gun(ItemId.BerryBlaster, "Berry Blaster", "Sprays squishy berry bolts. Fast and fun.", Cost(Mat.Berry, 3, Mat.Metal, 1), 1.5f, "gun_berry_blaster"),
+        Gun(ItemId.WoodPistol, "Wood Pistol", "A simple wooden pistol. Click for every shot.", Cost(Mat.Wood, 2, Mat.Metal, 1), 1.2f, "gun_wood_pistol"),
+        Gun(ItemId.SapSprayer, "Sap Sprayer", "Hold to spray sticky sap. Slows whatever it hits.", Cost(Mat.Sap, 2, Mat.Metal, 1), 1.5f, "gun_sap_sprayer"),
+        Gun(ItemId.SporeGun, "Spore Gun", "Lobs mushroom spore pods that burst into poison.", Cost(Mat.Mushroom, 2, Mat.Chemical, 1), 1.6f, "gun_spore_gun"),
+        Gun(ItemId.MossMusket, "Moss Musket", "Old, slow and mossy - but one shot hits HARD.", Cost(Mat.Moss, 2, Mat.Wood, 2), 1.8f, "gun_moss_musket"),
+        Gun(ItemId.PetalPopper, "Petal Popper", "A flowery shotgun. Deadly up close.", Cost(Mat.Petal, 2, Mat.Metal, 1), 1.5f, "gun_petal_popper"),
+        Gun(ItemId.CoalCannon, "Coal Cannon", "Lobs burning coal that explodes. Great against labs.", Cost(Mat.Coal, 3, Mat.Metal, 2), 2f, "gun_coal_cannon"),
+        Gun(ItemId.IronRifle, "Iron Rifle", "A full-auto rifle. Hold to fire.", Cost(Mat.IronOre, 3, Mat.Wood, 1), 1.8f, "gun_iron_rifle"),
+        Gun(ItemId.GoldRevolver, "Gold Revolver", "Shiny and powerful. Six-shooter style.", Cost(Mat.GoldOre, 2, Mat.Metal, 1), 1.6f, "gun_gold_revolver"),
+        Gun(ItemId.SulfurFlamer, "Sulfur Flamer", "A flamethrower. Sets everything nearby on fire.", Cost(Mat.Sulfur, 2, Mat.Chemical, 1, Mat.Metal, 1), 2f, "gun_sulfur_flamer"),
+        Gun(ItemId.GlowstoneLaser, "Glowstone Laser", "A rapid, long-range laser beam.", Cost(Mat.Glowstone, 2, Mat.Crystal, 1), 1.6f, "gun_glowstone_laser"),
+        Gun(ItemId.UraniumRailgun, "Uranium Railgun", "Charges a radioactive slug that goes through everything in a line.", Cost(Mat.Uranium, 2, Mat.Metal, 2, Mat.Battery, 1), 2.5f, "gun_uranium_railgun"),
+        Gun(ItemId.ObsidianShotgun, "Obsidian Shotgun", "Fires a wide blast of razor-sharp shards.", Cost(Mat.Obsidian, 2, Mat.Metal, 2), 1.8f, "gun_obsidian_shotgun"),
+        Gun(ItemId.CircuitBlaster, "Circuit Blaster", "Fires 3 electric bolts per click. Shocks (slows) targets.", Cost(Mat.Circuit, 2, Mat.Battery, 1), 1.6f, "gun_circuit_blaster"),
+        Gun(ItemId.CopperCoil, "Copper Coil Gun", "Lightning that jumps between up to 4 targets.", Cost(Mat.CopperWire, 2, Mat.Battery, 1), 1.8f, "gun_copper_coil"),
+        Gun(ItemId.BatterySMG, "Battery SMG", "Super fast electric bullets. Overheats quickly.", Cost(Mat.Battery, 3, Mat.Plastic, 1), 1.6f, "gun_battery_smg"),
+        Gun(ItemId.GlassSniper, "Glass Sniper", "Long-range sniper rifle. Aim (right click) for a closer look.", Cost(Mat.Glass, 2, Mat.Metal, 1, Mat.Wood, 1), 2f, "gun_glass_sniper"),
+        Gun(ItemId.PlasticSquirter, "Plastic Squirter", "A squirt gun full of slime. Slows people down.", Cost(Mat.Plastic, 2, Mat.Slime, 1), 1.2f, "gun_plastic_squirter"),
+        Gun(ItemId.MeteorLauncher, "Meteor Launcher", "Fires a flaming chunk of meteor. HUGE explosion.", Cost(Mat.Meteorite, 2, Mat.Metal, 2), 2.5f, "gun_meteor_launcher"),
+        Gun(ItemId.StarShooter, "Star Shooter", "Shoots 3 sparkly stars at once.", Cost(Mat.Stardust, 2, Mat.Crystal, 1), 1.8f, "gun_star_shooter"),
+
     };
 
     static Dictionary<ItemId, Recipe> byId;

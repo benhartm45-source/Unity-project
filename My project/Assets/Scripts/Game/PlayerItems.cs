@@ -136,6 +136,7 @@ public partial class Player
             else if (kind == ItemKind.Throwable && fireDown) StartThrow(h);
         }
         if (!Firing || h == null || h.id != ItemId.FreezeRay) StopBeamSound();
+        BurstUpdate();
 
         // drinking / throwing finish part-way through the animation
         if (drinkAt > 0f && Time.time >= drinkAt) { drinkAt = -1f; FinishDrink(); }
@@ -190,10 +191,13 @@ public partial class Player
             if (fireDown) Sfx.Play("overheat_click", 0.5f);
             return false;
         }
-        if (h.cooldown > 0f) return h.id == ItemId.FreezeRay;
+        GunDef gun = Guns.Get(h.id);
+        if (h.cooldown > 0f) return h.id == ItemId.FreezeRay || (gun != null && gun.mode == GunMode.Beam);
+        if (gun != null && !gun.auto && !fireDown) return false;          // click for every shot
         Transform muzzle = Model.Muzzle;
         if (muzzle == null) return false;
         Vector3 from = muzzle.position;
+        if (gun != null) { FireGun(h, gun, from); return true; }
         Vector3 aimPoint = GameCam.I.AimPoint(h.id == ItemId.FreezeRay ? 22f : 250f);
         Vector3 dir = (aimPoint - from).normalized;
         Color ec = h.enchant != Element.None ? Items.ElementColor(h.enchant) : h.R.color;
@@ -238,6 +242,185 @@ public partial class Player
                 break;
         }
         return true;
+    }
+
+    // ================================================================
+    // Table guns (Guns.cs): one bit of code fires all of them
+    // ================================================================
+
+    HeldItem burstItem;
+    int burstLeft;
+    float burstAt, beamSfxCd;
+    int beamTick;
+
+    void FireGun(HeldItem h, GunDef g, Vector3 from)
+    {
+        h.cooldown = g.cooldown;
+        AddHeat(h, g.heat);
+        if (g.burst > 1) { burstItem = h; burstLeft = g.burst - 1; burstAt = Time.time + g.burstGap; }
+        GunShot(h, g, from);
+    }
+
+    // Burst guns: the rest of the burst comes out a moment later.
+    void BurstUpdate()
+    {
+        if (burstLeft <= 0 || Time.time < burstAt) return;
+        if (burstItem != Held || dead || Model.Muzzle == null) { burstLeft = 0; return; }
+        GunDef g = Guns.Get(burstItem.id);
+        if (g == null) { burstLeft = 0; return; }
+        burstLeft--;
+        burstAt = Time.time + g.burstGap;
+        GunShot(burstItem, g, Model.Muzzle.position);
+    }
+
+    void GunShot(HeldItem h, GunDef g, Vector3 from)
+    {
+        Element el = h.enchant != Element.None ? h.enchant : g.element;
+        Color c = h.enchant != Element.None ? Items.ElementColor(h.enchant) : g.color;
+        float range = g.mode == GunMode.Beam ? g.range : Mathf.Max(g.range, 30f);
+        Vector3 aim = GameCam.I.AimPoint(g.mode == GunMode.Projectile ? 250f : range);
+        Vector3 dir = (aim - from).normalized;
+        float spreadMul = Aiming ? 0.5f : 1f;
+        for (int i = 0; i < Mathf.Max(1, g.pellets); i++)
+        {
+            Vector3 d = dir;
+            if (g.spread > 0f)
+            {
+                Vector2 r = Random.insideUnitCircle * g.spread * spreadMul;
+                d = Quaternion.AngleAxis(r.x, Vector3.up) * Quaternion.AngleAxis(r.y, Vector3.Cross(dir, Vector3.up).normalized) * dir;
+            }
+            switch (g.mode)
+            {
+                case GunMode.Hitscan: GunRay(from, d, g, el, c); break;
+                case GunMode.Beam: GunBeam(from, d, g, el, c); break;
+                case GunMode.Projectile: Projectile.FireGun(g, from + d * 0.2f, d * g.speed + Vector3.up * (g.gravity < -4f ? 1.5f : 0f), Team, el, c, true); break;
+            }
+        }
+        Model.Kick(g.kick);
+        GameCam.Kick(g.kick * 1.4f);
+        if (g.force > 3f && g.mode != GunMode.Beam) push -= dir * g.kick;
+        if (g.mode == GunMode.Beam)
+        {
+            beamSfxCd -= g.cooldown;
+            if (beamSfxCd <= 0f) { beamSfxCd = 0.3f; Sfx.Play(g.sound, g.volume, g.pitch * Random.Range(0.92f, 1.08f)); }
+        }
+        else
+        {
+            Sfx.Play(g.sound, g.volume, g.pitch * Random.Range(0.94f, 1.06f));
+            Fx.Flash(from, c, 4f, 3f, 0.06f);
+            Fx.Burst(from, c, 3, 2f, 0.05f, 0.15f, 0f);
+        }
+    }
+
+    Hit MakeHit(GunDef g, float damage, Vector3 point, Vector3 dir, Element el, bool dot = false)
+        => new Hit { damage = damage, point = point, dir = dir, force = g.force, element = el, team = Team, structureMul = g.structure, fromPlayer = true, dot = dot };
+
+    // Instant bullets / lasers. Pierce = goes through things in a line. Chain = lightning that jumps on.
+    void GunRay(Vector3 from, Vector3 dir, GunDef g, Element el, Color c)
+    {
+        Vector3 end = from + dir * g.range;
+        Vector3 to = end;
+        if (Laboratory.ShieldBlocks(from, end, Team, out Vector3 sp, out Laboratory lab))
+        {
+            end = sp;
+            to = sp;
+            lab.ShieldHit(g.damage * g.structure, sp, true);
+        }
+        float len = Vector3.Distance(from, end);
+        IDamageable first = null;
+        Vector3 firstPoint = to;
+        if (g.pierce)
+        {
+            RaycastHit[] hits = Physics.RaycastAll(from, dir, len, Combat.NotPlayer, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            var done = new System.Collections.Generic.HashSet<IDamageable>();
+            int pierced = 0;
+            foreach (RaycastHit hit in hits)
+            {
+                IDamageable d = Combat.Find(hit.collider);
+                if (d == null) { to = hit.point; Fx.Burst(hit.point + hit.normal * 0.05f, c, 10, 4f, 0.07f, 0.35f); break; }   // a wall stops it
+                if (done.Contains(d)) continue;
+                done.Add(d);
+                if (!Teams.Hostile(Team, d.Team)) { to = hit.point; break; }     // your own lab's wall stops it
+                if (d.Alive && Teams.Hostile(Team, d.Team))
+                {
+                    d.TakeHit(MakeHit(g, g.damage * (pierced == 0 ? 1f : 0.75f), hit.point, dir, el));
+                    Fx.Burst(hit.point, c, 8, 4f, 0.07f, 0.3f);
+                    pierced++;
+                }
+                if (pierced >= 4) { to = hit.point; break; }
+            }
+        }
+        else if (Physics.Raycast(from, dir, out RaycastHit hit, len, Combat.NotPlayer, QueryTriggerInteraction.Ignore))
+        {
+            to = hit.point;
+            IDamageable d = Combat.Find(hit.collider);
+            if (d != null && d.Alive && Teams.Hostile(Team, d.Team))
+            {
+                d.TakeHit(MakeHit(g, g.damage, hit.point, dir, el));
+                first = d;
+                firstPoint = hit.point;
+            }
+            Fx.Burst(hit.point + hit.normal * 0.05f, c, g.pellets > 1 ? 3 : 7, 3.5f, 0.06f, 0.3f);
+        }
+        float width = Mathf.Clamp(g.damage / 300f, 0.025f, 0.12f) + (g.pierce ? 0.08f : 0f);
+        Fx.Beam(from, to, c, width + 0.03f, g.pierce ? 0.25f : 0.08f, g.lightning);
+        Fx.Beam(from, to, new Color(1f, 1f, 1f, 0.8f), width * 0.4f, 0.06f, g.lightning);
+
+        // lightning jumps to the next closest targets
+        if (g.chain > 0 && first != null)
+        {
+            var hitSet = new System.Collections.Generic.HashSet<IDamageable> { first };
+            Vector3 at = firstPoint;
+            float dmg = g.damage;
+            for (int j = 0; j < g.chain; j++)
+            {
+                IDamageable next = null;
+                float best = 9f;
+                foreach (Collider col in Physics.OverlapSphere(at, 9f, ~0, QueryTriggerInteraction.Ignore))
+                {
+                    IDamageable d = Combat.Find(col);
+                    if (d == null || hitSet.Contains(d) || !d.Alive || !Teams.Hostile(Team, d.Team) || d is Laboratory) continue;
+                    float dist = Vector3.Distance(at, d.Center);
+                    if (dist < best) { best = dist; next = d; }
+                }
+                if (next == null) break;
+                hitSet.Add(next);
+                dmg *= 0.7f;
+                next.TakeHit(MakeHit(g, dmg, next.Center, (next.Center - at).normalized, el));
+                Fx.Beam(at, next.Center, c, 0.06f, 0.15f, true);
+                Fx.Burst(next.Center, c, 6, 3f, 0.06f, 0.3f);
+                at = next.Center;
+            }
+        }
+    }
+
+    // Short spray you hold down (flamethrower, sap sprayer).
+    void GunBeam(Vector3 from, Vector3 dir, GunDef g, Element el, Color c)
+    {
+        Vector3 to = from + dir * g.range;
+        beamTick++;
+        if (Laboratory.ShieldBlocks(from, to, Team, out Vector3 sp, out Laboratory lab))
+        {
+            to = sp;
+            lab.ShieldHit(g.damage * g.structure, sp, true);
+        }
+        else if (Physics.SphereCast(from, 0.35f, dir, out RaycastHit hit, g.range, Combat.NotPlayer, QueryTriggerInteraction.Ignore))
+        {
+            to = hit.point;
+            IDamageable d = Combat.Find(hit.collider);
+            // every 3rd tick counts as a proper hit (puts the element on, makes them flinch); the rest just hurt
+            if (d != null && d.Alive && Teams.Hostile(Team, d.Team)) d.TakeHit(MakeHit(g, g.damage, hit.point, dir, el, beamTick % 3 != 0));
+        }
+        // the spray itself
+        for (int k = 0; k < 3; k++)
+        {
+            Vector3 p = Vector3.Lerp(from, to, Random.Range(0.1f, 1f)) + Random.insideUnitSphere * 0.25f;
+            if (el == Element.Fire) Fx.Burst(p, Color.Lerp(c, new Color(1f, 0.9f, 0.3f), Random.value), 1, 1.2f, 0.18f, 0.35f, 2f);
+            else Fx.Burst(p, c, 1, 0.6f, 0.12f, 0.4f, -4f);
+        }
+        if (el == Element.Fire && Random.value < 0.3f) Fx.Puff(to, new Color(0.25f, 0.25f, 0.25f, 0.35f), 1, 0.2f, 0.4f, 0.8f, Vector3.up);
+        Fx.Beam(from, to, new Color(c.r, c.g, c.b, 0.45f), 0.22f, 0.1f, false);
     }
 
     void AddHeat(HeldItem h, float amount)

@@ -347,7 +347,10 @@ public class Scientist : MonoBehaviour
                 gripR = new Vector3(0f, -0.09f, -0.03f); gripL = new Vector3(0f, -0.08f, 0.18f);
                 Muzzle = Gfx.Pivot(model, new Vector3(0f, 0f, 0.48f), "Muzzle");
                 break;
-            default:    // potions and bombs: a glass flask
+            default:
+                GunDef gd = Guns.Get(item.id);
+                if (gd != null) { BuildGun(model, gd, enchanted ? Gfx.Glow(ench, 2.4f) : Gfx.Glow(gd.color, 2.4f)); break; }
+                // potions and bombs: a glass flask
                 hold = Hold.Flask;
                 twoHanded = false;
                 Material glass = Gfx.Clear(new Color(0.85f, 0.95f, 1f, 0.35f));
@@ -373,6 +376,156 @@ public class Scientist : MonoBehaviour
             Gfx.Part(model, PrimitiveType.Cube, new Vector3(-0.045f, 0.03f, 0.15f), new Vector3(0.01f, 0.02f, 0.3f), Gfx.Glow(ench, 3f));
         }
         Gfx.SetLayer(model.gameObject, 2);
+    }
+
+    // The table guns (Guns.cs) are built from a few simple shapes, depending on their 'look'.
+    void BuildGun(Transform m, GunDef g, Material glow)
+    {
+        const PrimitiveType Box = PrimitiveType.Cube, Ball = PrimitiveType.Sphere, Cyl = PrimitiveType.Cylinder;
+        Material body = Gfx.Lit(g.body, 0.45f, 0.4f);
+        Material trim = Gfx.Lit(g.trim, 0.6f, 0.6f);
+        Material dark = Gfx.Lit(new Color(0.15f, 0.16f, 0.18f), 0.5f, 0.7f);
+        Material grip = Gfx.Lit(new Color(0.12f, 0.1f, 0.09f), 0.2f);
+        Vector3 X90 = new Vector3(90f, 0f, 0f);
+        hold = Hold.Rifle;
+        twoHanded = true;
+        gripR = new Vector3(0f, -0.08f, -0.01f);
+        float muzzleZ = 0.5f, muzzleY = 0.03f;
+        System.Action pistolGrip = () => Gfx.Part(m, Box, new Vector3(0f, -0.07f, -0.01f), new Vector3(0.05f, 0.13f, 0.06f), grip, new Vector3(15f, 0f, 0f));
+        switch (g.look)
+        {
+            case GunLook.Pistol:
+                Gfx.Part(m, Box, new Vector3(0f, 0.03f, 0.08f), new Vector3(0.055f, 0.07f, 0.26f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.24f), new Vector3(0.035f, 0.04f, 0.035f), trim, X90);
+                Gfx.Part(m, Box, new Vector3(0f, -0.07f, -0.01f), new Vector3(0.05f, 0.13f, 0.06f), trim, new Vector3(15f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, -0.03f, 0.05f), new Vector3(0.02f, 0.03f, 0.07f), dark);
+                Gfx.Part(m, Box, new Vector3(0f, 0.068f, 0.08f), new Vector3(0.02f, 0.012f, 0.18f), glow);
+                gripL = new Vector3(0f, -0.07f, 0.03f);
+                muzzleZ = 0.3f;
+                break;
+            case GunLook.Revolver:
+                Gfx.Part(m, Box, new Vector3(0f, 0.035f, 0.04f), new Vector3(0.05f, 0.07f, 0.14f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.035f, 0.05f), new Vector3(0.085f, 0.035f, 0.085f), body, X90);   // the drum
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.22f), new Vector3(0.035f, 0.11f, 0.035f), body, X90);
+                Gfx.Part(m, Box, new Vector3(0f, 0.075f, 0.3f), new Vector3(0.01f, 0.02f, 0.02f), glow);
+                Gfx.Part(m, Box, new Vector3(0f, -0.07f, -0.03f), new Vector3(0.05f, 0.13f, 0.06f), trim, new Vector3(20f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, -0.02f, 0.04f), new Vector3(0.02f, 0.03f, 0.06f), dark);
+                gripR = new Vector3(0f, -0.08f, -0.03f); gripL = new Vector3(0f, -0.08f, 0.01f);
+                muzzleZ = 0.34f; muzzleY = 0.05f;
+                break;
+            case GunLook.SMG:
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.1f), new Vector3(0.07f, 0.1f, 0.32f), body);
+                Gfx.Part(m, Box, new Vector3(0f, -0.09f, 0.12f), new Vector3(0.04f, 0.14f, 0.05f), trim, new Vector3(-8f, 0f, 0f));
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.3f), new Vector3(0.035f, 0.06f, 0.035f), dark, X90);
+                Gfx.Part(m, Box, new Vector3(0f, -0.05f, 0.21f), new Vector3(0.04f, 0.07f, 0.05f), grip);
+                Gfx.Part(m, Box, new Vector3(0.037f, 0.03f, 0.1f), new Vector3(0.006f, 0.02f, 0.22f), glow);
+                Gfx.Part(m, Box, new Vector3(-0.037f, 0.03f, 0.1f), new Vector3(0.006f, 0.02f, 0.22f), glow);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.08f, 0.21f);
+                muzzleZ = 0.37f;
+                break;
+            case GunLook.Rifle:
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.15f), new Vector3(0.07f, 0.09f, 0.5f), body);
+                Gfx.Part(m, Box, new Vector3(0f, -0.01f, -0.17f), new Vector3(0.06f, 0.1f, 0.2f), trim);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.48f), new Vector3(0.035f, 0.1f, 0.035f), dark, X90);
+                Gfx.Part(m, Box, new Vector3(0f, -0.08f, 0.12f), new Vector3(0.045f, 0.12f, 0.06f), dark, new Vector3(-10f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, 0.08f, 0.1f), new Vector3(0.03f, 0.03f, 0.08f), dark);
+                Gfx.Part(m, Box, new Vector3(0f, 0.068f, 0.3f), new Vector3(0.02f, 0.012f, 0.2f), glow);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.04f, 0.3f);
+                muzzleZ = 0.59f;
+                break;
+            case GunLook.Musket:
+                Gfx.Part(m, Box, new Vector3(0f, -0.01f, 0.12f), new Vector3(0.06f, 0.08f, 0.78f), body);
+                Gfx.Part(m, Box, new Vector3(0f, -0.04f, -0.22f), new Vector3(0.055f, 0.12f, 0.12f), body, new Vector3(-15f, 0f, 0f));
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.045f, 0.38f), new Vector3(0.04f, 0.32f, 0.04f), dark, X90);
+                for (int i = 0; i < 3; i++) Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.12f + i * 0.2f), new Vector3(0.075f, 0.012f, 0.075f), trim, X90);   // mossy bands
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.045f, 0.71f), new Vector3(0.06f, 0.02f, 0.06f), dark, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, 0.06f, 0.0f), new Vector3(0.06f, 0.04f, 0.1f), glow);
+                gripR = new Vector3(0f, -0.06f, -0.06f); gripL = new Vector3(0f, -0.04f, 0.34f);
+                muzzleZ = 0.74f; muzzleY = 0.045f;
+                break;
+            case GunLook.Shotgun:
+                Gfx.Part(m, Box, new Vector3(0f, 0.01f, 0.05f), new Vector3(0.08f, 0.1f, 0.3f), body);
+                foreach (float x in new[] { -0.022f, 0.022f }) Gfx.Part(m, Cyl, new Vector3(x, 0.04f, 0.34f), new Vector3(0.042f, 0.17f, 0.042f), dark, X90);
+                Gfx.Part(m, Box, new Vector3(0f, -0.03f, 0.3f), new Vector3(0.065f, 0.05f, 0.14f), trim);
+                Gfx.Part(m, Box, new Vector3(0f, -0.02f, -0.17f), new Vector3(0.06f, 0.1f, 0.18f), trim);
+                Gfx.Part(m, Box, new Vector3(0.042f, 0.02f, 0.05f), new Vector3(0.006f, 0.03f, 0.2f), glow);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.06f, 0.3f);
+                muzzleZ = 0.52f; muzzleY = 0.04f;
+                break;
+            case GunLook.Sniper:
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.12f), new Vector3(0.06f, 0.08f, 0.45f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.56f), new Vector3(0.03f, 0.22f, 0.03f), dark, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.1f, 0.12f), new Vector3(0.05f, 0.13f, 0.05f), dark, X90);       // scope
+                Gfx.Part(m, Ball, new Vector3(0f, 0.1f, 0.25f), Vector3.one * 0.045f, glow);
+                Gfx.Part(m, Box, new Vector3(0f, 0.06f, 0.12f), new Vector3(0.02f, 0.04f, 0.04f), dark);
+                Gfx.Part(m, Box, new Vector3(0f, -0.01f, -0.17f), new Vector3(0.06f, 0.11f, 0.2f), trim);
+                Gfx.Part(m, Box, new Vector3(0f, -0.07f, 0.12f), new Vector3(0.04f, 0.08f, 0.05f), dark);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.04f, 0.3f);
+                muzzleZ = 0.79f;
+                break;
+            case GunLook.Railgun:
+                hold = Hold.Heavy;
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.02f), new Vector3(0.11f, 0.13f, 0.32f), body);
+                foreach (float x in new[] { -0.045f, 0.045f }) Gfx.Part(m, Box, new Vector3(x, 0.04f, 0.33f), new Vector3(0.025f, 0.07f, 0.62f), dark);
+                for (int i = 0; i < 5; i++) Gfx.Part(m, Cyl, new Vector3(0f, 0.04f, 0.12f + i * 0.11f), new Vector3(0.08f, 0.012f, 0.08f), glow, X90);
+                Gfx.Part(m, Box, new Vector3(0f, 0.08f, -0.16f), new Vector3(0.09f, 0.09f, 0.12f), trim);
+                Gfx.Part(m, Box, new Vector3(0f, 0.08f, -0.16f), new Vector3(0.095f, 0.03f, 0.06f), glow);
+                Gfx.Part(m, Box, new Vector3(0f, -0.09f, 0.02f), new Vector3(0.05f, 0.13f, 0.06f), grip, new Vector3(15f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, -0.07f, 0.26f), new Vector3(0.05f, 0.1f, 0.06f), grip);
+                gripR = new Vector3(0f, -0.11f, 0.02f); gripL = new Vector3(0f, -0.1f, 0.26f);
+                muzzleZ = 0.66f; muzzleY = 0.04f;
+                break;
+            case GunLook.Launcher:
+                hold = Hold.Heavy;
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.15f), new Vector3(0.16f, 0.38f, 0.16f), body, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.53f), new Vector3(0.19f, 0.025f, 0.19f), trim, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, -0.22f), new Vector3(0.18f, 0.025f, 0.18f), trim, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.52f), new Vector3(0.12f, 0.03f, 0.12f), glow, X90);
+                Gfx.Part(m, Box, new Vector3(0.08f, 0.05f, 0.15f), new Vector3(0.02f, 0.06f, 0.22f), glow);
+                Gfx.Part(m, Box, new Vector3(0.1f, 0.13f, 0.08f), new Vector3(0.04f, 0.05f, 0.1f), dark);
+                Gfx.Part(m, Box, new Vector3(0f, -0.09f, 0.02f), new Vector3(0.05f, 0.13f, 0.06f), grip, new Vector3(15f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, -0.08f, 0.3f), new Vector3(0.05f, 0.11f, 0.06f), grip);
+                gripR = new Vector3(0f, -0.11f, 0.02f); gripL = new Vector3(0f, -0.11f, 0.28f);
+                muzzleZ = 0.58f; muzzleY = 0.05f;
+                break;
+            case GunLook.Sprayer:
+                Gfx.Part(m, Box, new Vector3(0f, 0.01f, 0.1f), new Vector3(0.07f, 0.09f, 0.3f), dark);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.12f, 0.06f), new Vector3(0.1f, 0.12f, 0.1f), body, X90);     // fuel tank
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.12f, 0.06f), new Vector3(0.104f, 0.02f, 0.104f), glow, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.33f), new Vector3(0.04f, 0.1f, 0.04f), trim, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.44f), new Vector3(0.07f, 0.02f, 0.07f), dark, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, -0.02f, 0.45f), Vector3.one * 0.03f, glow);                  // pilot light
+                Gfx.Part(m, Box, new Vector3(0f, -0.05f, 0.22f), new Vector3(0.04f, 0.07f, 0.05f), grip);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.08f, 0.22f);
+                muzzleZ = 0.47f; muzzleY = 0.02f;
+                break;
+            case GunLook.Coil:
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.05f), new Vector3(0.07f, 0.09f, 0.25f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.3f), new Vector3(0.03f, 0.15f, 0.03f), dark, X90);
+                for (int i = 0; i < 6; i++) Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.19f + i * 0.045f), new Vector3(0.09f, 0.015f, 0.09f), trim, X90);   // copper coils
+                Gfx.Part(m, Ball, new Vector3(0f, 0.03f, 0.47f), Vector3.one * 0.065f, glow);
+                Gfx.Part(m, Box, new Vector3(0f, -0.08f, 0.12f), new Vector3(0.05f, 0.1f, 0.07f), glow);     // battery pack
+                pistolGrip();
+                gripL = new Vector3(0f, -0.05f, 0.2f);
+                muzzleZ = 0.5f;
+                break;
+            default:    // Blaster
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.12f), new Vector3(0.08f, 0.1f, 0.36f), body);
+                for (int i = 0; i < 3; i++) Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.27f + i * 0.05f), new Vector3(0.13f, 0.13f, 0.012f), trim, new Vector3(0f, 0f, 45f));
+                Gfx.Part(m, Ball, new Vector3(0f, 0.02f, 0.43f), Vector3.one * 0.07f, glow);
+                Gfx.Part(m, Box, new Vector3(0f, 0.08f, 0.08f), new Vector3(0.03f, 0.03f, 0.18f), glow);
+                Gfx.Part(m, Box, new Vector3(0f, -0.04f, 0.2f), new Vector3(0.05f, 0.06f, 0.1f), grip);
+                pistolGrip();
+                gripL = new Vector3(0f, -0.06f, 0.18f);
+                muzzleZ = 0.47f; muzzleY = 0.02f;
+                break;
+        }
+        Muzzle = Gfx.Pivot(m, new Vector3(0f, muzzleY, muzzleZ), "Muzzle");
     }
 
     // ---------- one-off actions ----------

@@ -146,7 +146,7 @@ public class GameHUD : MonoBehaviour
             {
                 stationSel = Mathf.Clamp(stationSel, 0, cells - 1);
                 int was = stationSel;
-                int cols = stationSel < mats.Count ? MatCols : 2;
+                int cols = stationSel < mats.Count ? MatCols : KnownCols(known.Count);
                 if (NavRight()) stationSel = Mathf.Min(cells - 1, stationSel + 1);
                 if (NavLeft()) stationSel = Mathf.Max(0, stationSel - 1);
                 if (NavDown()) stationSel = Mathf.Min(cells - 1, stationSel + cols);
@@ -172,7 +172,7 @@ public class GameHUD : MonoBehaviour
         {
             if (howTo) { if (esc || back) { howTo = false; Sfx.Play("tick", 0.4f); } return; }
             if (esc) { SetPause(false); return; }
-            MenuKeys(6, ref pauseSel, ChoosePause);
+            MenuKeys(7, ref pauseSel, ChoosePause);
             return;
         }
         if (esc) SetPause(true);
@@ -228,8 +228,9 @@ public class GameHUD : MonoBehaviour
             case 1: howTo = true; break;
             case 2: Settings.FirstPerson = !Settings.FirstPerson; Settings.Save(); break;
             case 3: SkipPhase(); SetPause(false); break;
-            case 4: SetPause(false); MLGame.StartMatch(Player.Local != null ? Player.Local.labIndex : 0); break;
-            case 5: SetPause(false); MLGame.I.EndMatch(); break;
+            case 4: GiveTestMaterials(); break;
+            case 5: SetPause(false); MLGame.StartMatch(Player.Local != null ? Player.Local.labIndex : 0); break;
+            case 6: SetPause(false); MLGame.I.EndMatch(); break;
         }
     }
 
@@ -243,6 +244,16 @@ public class GameHUD : MonoBehaviour
     }
 
     static void SkipPhase() => MLGame.I?.SkipPhase();
+
+    // Practice helper: 10 of every material straight into your lab (solo only).
+    static void GiveTestMaterials()
+    {
+        Player p = Player.Local;
+        if (p == null || Net.Active) { Toast("Only in solo practice.", Color.white); return; }
+        if (p.MyLab == null || p.MyLab.Destroyed) return;
+        for (int m = 0; m < Items.MatCount; m++) p.MyLab.storage[m] += 10;
+        Toast("Practice: +10 of every material in your lab storage.", new Color(0.6f, 1f, 0.6f));
+    }
 
     // ================================================================
     // Drawing helpers (everything is laid out on a 1920 x 1080 screen and scaled)
@@ -789,6 +800,8 @@ public class GameHUD : MonoBehaviour
     // Station menus
     // ================================================================
 
+    static int KnownCols(int n) => n > 12 ? 3 : 2;
+
     // Materials you can put in the mix (anything you have, carried or stored).
     static List<int> StationMats(Player p)
     {
@@ -967,15 +980,16 @@ public class GameHUD : MonoBehaviour
             Text(x + 30f, yy, w - 60f, 60f, "Nothing yet. Every recipe here is a secret - try different mixes and press COMBINE. Wrong mixes don't cost you anything.", 17, Dim, TextAnchor.UpperLeft, false, true);
             return;
         }
-        int rowsNeeded = Mathf.CeilToInt(known.Count / 2f);
+        int kc = KnownCols(known.Count);
+        int rowsNeeded = Mathf.CeilToInt(known.Count / (float)kc);
         float avail = y + h - 16f - yy;
-        float ch = Mathf.Clamp(avail / rowsNeeded, 34f, 70f);
-        float colW = (w - 60f - 10f) / 2f;
+        float ch = Mathf.Clamp(avail / rowsNeeded, 30f, 70f);
+        float colW = (w - 60f - (kc - 1) * 10f) / kc;
         for (int i = 0; i < known.Count; i++)
         {
             Recipe r = known[i];
             int cell = mats.Count + i;
-            float rx = x + 30f + (i % 2) * (colW + 10f), ry = yy + (i / 2) * ch;
+            float rx = x + 30f + (i % kc) * (colW + 10f), ry = yy + (i / kc) * ch;
             if (ry + ch > y + h) break;
             string problem = p.CraftProblem(r);
             bool ok = problem == null;
@@ -986,7 +1000,7 @@ public class GameHUD : MonoBehaviour
             if (sel) Box(rx, ry, 4f, ch - 6f, lab.LabColor);
             float isz = ch - 16f;
             Icon(rx + 10f, ry + 5f, isz, Items.Icon(r.icon), r.color);
-            Text(rx + 18f + isz, ry, 260f, (ch - 6f) * 0.6f, r.name, 18, ok ? Color.white : new Color(1f, 1f, 1f, 0.55f));
+            Text(rx + 18f + isz, ry, 260f, (ch - 6f) * 0.6f, r.name, kc > 2 ? 15 : 18, ok ? Color.white : new Color(1f, 1f, 1f, 0.55f));
             if (!ok) Text(rx + 18f + isz, ry + (ch - 6f) * 0.5f, 300f, (ch - 6f) * 0.5f, problem, 12, new Color(1f, 0.55f, 0.45f), TextAnchor.MiddleLeft, false);
             float cx = rx + colW - 10f;
             for (int m = Items.MatCount - 1; m >= 0; m--)
@@ -994,9 +1008,9 @@ public class GameHUD : MonoBehaviour
                 int need = r.cost[m];
                 if (need <= 0) continue;
                 bool enough = p.Have(m) >= need;
-                cx -= 56f;
-                Icon(cx, ry + (ch - 6f) / 2f - 13f, 26f, Items.MatIcon(m), Items.MatColors[m]);
-                Text(cx + 27f, ry, 30f, ch - 6f, need.ToString(), 17, enough ? Color.white : new Color(1f, 0.35f, 0.3f));
+                cx -= kc > 2 ? 44f : 56f;
+                Icon(cx, ry + (ch - 6f) / 2f - 11f, 22f, Items.MatIcon(m), Items.MatColors[m]);
+                Text(cx + 23f, ry, 24f, ch - 6f, need.ToString(), 15, enough ? Color.white : new Color(1f, 0.35f, 0.3f));
             }
             if (Clicked(new Rect(rx, ry, colW, ch - 6f)))
             {
@@ -1028,9 +1042,9 @@ public class GameHUD : MonoBehaviour
         Box(0f, 0f, W, 1080f, new Color(0f, 0f, 0f, 0.6f));
         float x = 120f, y = 260f;
         Text(x, y - 120f, 800f, 100f, "PAUSED", 80, Color.white);
-        string[] rows = { "RESUME", "HOW TO PLAY & DISCOVERIES", "CAMERA:  " + (Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON") + "   (V)", MLGame.I.phase < MLGame.Phase.Madness ? "SKIP TO NEXT PHASE (practice)" : "SKIP PHASE (already MADNESS)", "RESTART MATCH", "QUIT TO MENU" };
+        string[] rows = { "RESUME", "HOW TO PLAY & DISCOVERIES", "CAMERA:  " + (Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON") + "   (V)", MLGame.I.phase < MLGame.Phase.Madness ? "SKIP TO NEXT PHASE (practice)" : "SKIP PHASE (already MADNESS)", "+10 OF EVERY MATERIAL (practice)", "RESTART MATCH", "QUIT TO MENU" };
         for (int i = 0; i < rows.Length; i++)
-            if (MenuButton(i, ref pauseSel, x, y + i * 84f, 620f, 70f, rows[i], i == 0)) ChoosePause(i);
+            if (MenuButton(i, ref pauseSel, x, y + i * 80f, 620f, 68f, rows[i], i == 0)) ChoosePause(i);
         // quick settings
         float sx = 900f, sy = 260f;
         Box(sx, sy, 520f, 200f, Panel);
@@ -1079,8 +1093,25 @@ public class GameHUD : MonoBehaviour
             List<Recipe> found = Discoveries.Known(order[c]);
             Text(x, y, colW, 34f, LabStation.Names[(int)order[c]].ToUpperInvariant() + "   " + found.Count + "/" + all.Count, 22, new Color(0.7f, 0.45f, 1f));
             y += 40f;
+            float step = Mathf.Clamp(640f / Mathf.Max(1, found.Count), 24f, 56f);
+            bool compact = step < 50f;          // lots found: one line each
             foreach (Recipe r in found)
             {
+                if (compact)
+                {
+                    Icon(x, y, 22f, Items.Icon(r.icon), r.color);
+                    Text(x + 28f, y - 2f, 190f, 24f, r.name, 14, Color.white);
+                    float cx2 = x + 210f;
+                    for (int m = 0; m < Items.MatCount; m++)
+                    {
+                        if (r.cost[m] <= 0) continue;
+                        Icon(cx2, y + 2f, 18f, Items.MatIcon(m), Items.MatColors[m]);
+                        Text(cx2 + 18f, y - 2f, 22f, 24f, r.cost[m].ToString(), 13, Color.white);
+                        cx2 += 40f;
+                    }
+                    y += step;
+                    continue;
+                }
                 Icon(x, y, 40f, Items.Icon(r.icon), r.color);
                 Text(x + 48f, y - 2f, colW - 60f, 24f, r.name, 17, Color.white);
                 float cx = x + 48f;
@@ -1091,7 +1122,7 @@ public class GameHUD : MonoBehaviour
                     Text(cx + 21f, y + 20f, 30f, 24f, r.cost[m].ToString(), 15, Color.white);
                     cx += 48f;
                 }
-                y += 56f;
+                y += step;
             }
             int secret = all.Count - found.Count;
             if (secret > 0) Text(x, y, colW - 20f, 30f, "+ " + secret + " secret recipe" + (secret == 1 ? "" : "s") + " (???)", 16, Dim, TextAnchor.MiddleLeft, false);

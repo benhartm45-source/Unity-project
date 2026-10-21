@@ -50,6 +50,7 @@ public class Status
             case Element.Ice: slow = Mathf.Max(slow, 2.5f); chill += 0.35f; break;
             case Element.Poison: poison = 5f; poisonStacks = Mathf.Min(3, poisonStacks + 1); break;
             case Element.Slime: slow = Mathf.Max(slow, 1.2f); break;
+            case Element.Shock: slow = Mathf.Max(slow, 0.5f); break;      // a short jolt
         }
         if (chill >= 1f) { chill = 0f; freeze = 1.3f; }
     }
@@ -141,7 +142,7 @@ public static class Combat
 // ---------------------------------------------------------------
 public class Projectile : MonoBehaviour
 {
-    public enum Kind { Plasma, Slime, Toxic, Laser, TurretBolt }
+    public enum Kind { Plasma, Slime, Toxic, Laser, TurretBolt, Gun }
 
     Kind kind;
     Vector3 vel;
@@ -152,6 +153,45 @@ public class Projectile : MonoBehaviour
     Color color;
     Transform look;
     float trailT;
+    GunDef gun;                 // Kind.Gun: which gun fired it (blast, puddle, structure damage...)
+    Element element;            // what it does on hit (the gun's own element, or the enchant)
+
+    // A shot from one of the table guns (Guns.cs).
+    public static void FireGun(GunDef g, Vector3 pos, Vector3 vel, int team, Element element, Color color, bool fromPlayer)
+    {
+        var go = new GameObject("shot " + g.id);
+        go.transform.position = pos;
+        var p = go.AddComponent<Projectile>();
+        p.kind = Kind.Gun;
+        p.gun = g;
+        p.vel = vel;
+        p.team = team;
+        p.ench = element;
+        p.element = element;
+        p.fromPlayer = fromPlayer;
+        p.life = g.life;
+        p.damage = g.damage;
+        p.radius = Mathf.Max(0.08f, g.size * 0.6f);
+        p.gravity = g.gravity;
+        p.color = color;
+        if (g.star)
+        {
+            p.look = Gfx.Part(go.transform, PrimitiveType.Cube, Vector3.zero, Vector3.one * g.size, Gfx.Glow(color, 4f), new Vector3(45f, 0f, 45f), false).transform;
+            Gfx.Part(p.look, PrimitiveType.Cube, Vector3.zero, Vector3.one, Gfx.Glow(Color.white, 3f), new Vector3(0f, 45f, 0f), false);
+        }
+        else if (g.blast > 0f)
+        {
+            p.look = Gfx.Part(go.transform, PrimitiveType.Sphere, Vector3.zero, Vector3.one * g.size, Gfx.Glow(color, 3f), default, false).transform;
+            Gfx.Part(go.transform, PrimitiveType.Sphere, Vector3.zero, Vector3.one * g.size * 1.6f, Gfx.Clear(new Color(color.r, color.g, color.b, 0.3f)), default, false);
+            if (g.size >= 0.3f) Gfx.AddLight(go.transform, Vector3.zero, color, 5f, 2f);
+        }
+        else if (g.gravity < -4f)
+            p.look = Gfx.Part(go.transform, PrimitiveType.Sphere, Vector3.zero, new Vector3(g.size, g.size * 0.85f, g.size * 1.2f), Gfx.Glow(color, 1.5f), default, false).transform;
+        else
+            p.look = Gfx.Part(go.transform, PrimitiveType.Capsule, Vector3.zero, new Vector3(g.size * 0.7f, g.size * 2.2f, g.size * 0.7f), Gfx.Glow(color, 3.5f), new Vector3(90f, 0f, 0f), false).transform;
+        Gfx.SetLayer(go, 2);
+        if (vel.sqrMagnitude > 0.01f) go.transform.rotation = Quaternion.LookRotation(vel);
+    }
 
     public static void Fire(Kind kind, Vector3 pos, Vector3 vel, int team, Element ench, bool fromPlayer)
     {
@@ -216,7 +256,7 @@ public class Projectile : MonoBehaviour
         // forcefields stop shots from outside
         if (Laboratory.ShieldBlocks(prev, next, team, out Vector3 sp, out Laboratory lab))
         {
-            lab.ShieldHit(damage * (kind == Kind.Plasma ? 2f : 1f) + (kind == Kind.Toxic ? 15f : 0f), sp, fromPlayer);
+            lab.ShieldHit(damage * (kind == Kind.Plasma || (gun != null && gun.blast > 0f) ? 2f : 1f) + (kind == Kind.Toxic ? 15f : 0f), sp, fromPlayer);
             Fx.Burst(sp, color, 10, 4f, 0.1f, 0.4f);
             Destroy(gameObject);
             return;
@@ -244,6 +284,7 @@ public class Projectile : MonoBehaviour
         transform.position = next;
         if (vel.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(vel);
         if (look != null && kind == Kind.Toxic) look.Rotate(400f * dt, 0f, 0f);
+        if (look != null && gun != null && gun.star) look.Rotate(0f, 0f, 720f * dt, Space.Self);
 
         trailT -= dt;
         if (trailT <= 0f)
@@ -252,6 +293,12 @@ public class Projectile : MonoBehaviour
             if (kind == Kind.Plasma) Fx.Burst(prev, color, 1, 0.5f, 0.12f, 0.35f, 0f);
             else if (kind == Kind.Slime) Fx.Burst(prev, color, 1, 0.3f, 0.08f, 0.4f, -8f);
             else if (kind == Kind.Toxic) Fx.Puff(prev, new Color(0.6f, 1f, 0.2f, 0.4f), 1, 0.05f, 0.1f, 0.5f, Vector3.zero);
+            else if (kind == Kind.Gun)
+            {
+                trailT = gun.blast > 0f ? 0.025f : 0.04f;
+                if (gun.blast > 0f && gun.element == Element.Fire) Fx.Puff(prev, new Color(0.3f, 0.3f, 0.3f, 0.4f), 1, 0.05f, gun.size * 0.8f, 0.6f, Vector3.up * 0.5f);
+                Fx.Burst(prev, color, 1, 0.4f, gun.size * 0.5f, 0.3f, gun.gravity < -4f ? -6f : 0f);
+            }
         }
     }
 
@@ -273,6 +320,21 @@ public class Projectile : MonoBehaviour
                 Sfx.At("glass_break", point, 0.9f);
                 Fx.Burst(point, new Color(0.8f, 1f, 0.6f), 10, 3f, 0.06f, 0.5f);
                 ToxicCloud.Spawn(point + Vector3.up * 0.5f, team, fromPlayer);
+                break;
+            case Kind.Gun:
+                if (gun.blast > 0f)
+                {
+                    Combat.Blast(point + normal * 0.2f, gun.blast, damage, gun.force, team, element, gun.structure, fromPlayer, color);
+                    if (element == Element.Poison) ToxicCloud.Spawn(point + Vector3.up * 0.5f, team, fromPlayer);
+                }
+                else
+                {
+                    if (target != null && Teams.Hostile(team, target.Team))
+                        target.TakeHit(new Hit { damage = damage, point = point, dir = vel.normalized, force = gun.force, element = element, team = team, structureMul = gun.structure, fromPlayer = fromPlayer });
+                    Fx.Burst(point, color, 8, 3f, gun.size * 0.5f, 0.35f);
+                    if (gun.element == Element.Slime || gun.puddle) Sfx.At("slime_splat", point, 0.4f, 1.3f);
+                    if (gun.puddle) SlimePuddle.Spawn(point, team);
+                }
                 break;
             default:
                 if (target != null && Teams.Hostile(team, target.Team))
