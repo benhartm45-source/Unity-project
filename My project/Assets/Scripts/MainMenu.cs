@@ -65,7 +65,7 @@ public class MainMenu : MonoBehaviour
             int i = NetLobby.Instance.Members.FindIndex(m => m.id == me);
             if (i >= 0) slot = i;
         }
-        MLGame.StartMatch(slot);
+        LoadingScreen.Run("JOINING THE EXPERIMENT", () => MLGame.StartMatch(slot));
     }
 
     void Awake()
@@ -100,7 +100,7 @@ public class MainMenu : MonoBehaviour
 
     void Update()
     {
-        if (MLGame.Playing) { if (GUIUtility.keyboardControl != 0) GUIUtility.keyboardControl = 0; return; }   // hidden while you play
+        if (MLGame.Playing || LoadingScreen.Active) { if (GUIUtility.keyboardControl != 0) GUIUtility.keyboardControl = 0; return; }   // hidden while you play
         float dt = Time.unscaledDeltaTime;
         mouseMoved = Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > 0.5f;
         for (int i = 0; i < bubbles.Length; i++)
@@ -199,7 +199,7 @@ public class MainMenu : MonoBehaviour
                 {
                     Click(0.6f);
                     if (!MLGame.ArenaPresent) Toast("No arena yet! In Unity: Tools > Mad Lab > 2. Create Lab Arena");
-                    else MLGame.StartMatch(0);
+                    else LoadingScreen.Run("ENTERING THE LAB", () => MLGame.StartMatch(0));
                 }
                 else if (row == 1) GoTo(Screen2.Settings);
                 else GoTo(Screen2.Coop);
