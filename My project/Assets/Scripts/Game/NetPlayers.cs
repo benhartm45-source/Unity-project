@@ -103,7 +103,7 @@ public class NetPlayers : MonoBehaviour
         w.WriteValueSafe(vel.x); w.WriteValueSafe(vel.y); w.WriteValueSafe(vel.z);
         w.WriteValueSafe(yaw); w.WriteValueSafe(pitch);
         w.WriteValueSafe(flags);
-        w.WriteValueSafe((byte)(held + 1));
+        w.WriteValueSafe((ushort)(held + 1));      // (ushort: there are more than 255 items now)
         w.WriteValueSafe((byte)armor);
     }
 
@@ -116,7 +116,7 @@ public class NetPlayers : MonoBehaviour
         r.ReadValueSafe(out float vx); r.ReadValueSafe(out float vy); r.ReadValueSafe(out float vz);
         r.ReadValueSafe(out float yaw); r.ReadValueSafe(out float pitch);
         r.ReadValueSafe(out byte flags);
-        r.ReadValueSafe(out byte held);
+        r.ReadValueSafe(out ushort held);
         r.ReadValueSafe(out byte armor);
         Player me = Player.Local;
         if (me != null && slot == me.labIndex) return;

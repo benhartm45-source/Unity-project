@@ -22,6 +22,9 @@ public class MLGame : MonoBehaviour
     public enum Phase { Collect, Experiment, Madness, Over }
     public const float CollectTime = 180f, ExperimentTime = 30f, ZoneDelay = 40f, ZoneShrinkTime = 230f, ZoneEndRadius = 18f;
 
+    // Raid drones during MADNESS (solo). Switched off for now - set to true to bring them back.
+    public static bool DronesEnabled = false;
+
     public Phase phase { get; private set; }
     public float phaseLeft { get; private set; }
     public float madnessTime { get; private set; }
@@ -297,8 +300,11 @@ public class MLGame : MonoBehaviour
                     zoneRadius = Mathf.Lerp(ArenaRadius * 0.98f, ZoneEndRadius, k);
                     if (madnessTime - dt <= ZoneDelay) { GameHUD.Warn("THE ZONE IS CLOSING IN!"); Sfx.Play("zone", 0.8f); }
                 }
-                nextWave -= dt;
-                if (nextWave <= 0f) SpawnWave();
+                if (DronesEnabled)          // raid drones are switched off for now (see DronesEnabled)
+                {
+                    nextWave -= dt;
+                    if (nextWave <= 0f) SpawnWave();
+                }
                 CheckWin();
                 break;
         }
