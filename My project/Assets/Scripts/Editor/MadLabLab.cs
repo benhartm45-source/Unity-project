@@ -382,7 +382,7 @@ public static partial class MadLabKitMenu
                 p.Add(B(new Vector3(x, 1.1f, z), new Vector3(0.08f, 2.2f, 0.08f), metalDark));
         for (int s = 0; s < 3; s++) p.Add(B(new Vector3(0f, 0.25f + s * 0.75f, 0f), new Vector3(2.7f, 0.06f, 0.7f), metal));
         // a bin for each material, with a glowing lid in its colour
-        for (int m = 0; m < Items.MatCount; m++)
+        for (int m = 0; m < Items.BaseMatCount; m++)
         {
             int shelf = m < 3 ? 0 : 1;
             float x = shelf == 0 ? -0.85f + m * 0.85f : -0.45f + (m - 3) * 0.9f;

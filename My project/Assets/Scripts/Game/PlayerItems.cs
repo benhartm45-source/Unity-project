@@ -178,7 +178,7 @@ public partial class Player
                 StartDrink(slots[i]);
                 return;
             }
-        GameHUD.Toast("No Healing Potions - brew some at your Brewing Stand (2 Herb).", Color.white);
+        GameHUD.Toast("No Healing Potions. (Maybe the Brewing Stand can make some...)", Color.white);
     }
 
     // ---------------- weapons ----------------
@@ -574,6 +574,48 @@ public partial class Player
         }
         Sfx.Play("craft_done", 0.8f);
         GameHUD.Toast(r.name + (r.kind == ItemKind.Upgrade ? " built!" : r.kind == ItemKind.Enchant ? " applied!" : " crafted!"), r.color);
+    }
+
+    // EXPERIMENTING: try a mix of materials at a station. If it's a real recipe you make it (and discover it).
+    // Wrong mixes don't cost anything. Returns true if it made something.
+    public bool Experiment(Station st, int[] mix)
+    {
+        if (MyLab == null || MyLab.Destroyed) { GameHUD.Toast("Your lab is destroyed.", new Color(1f, 0.5f, 0.4f)); return false; }
+        if (!InsideOwnLab) { GameHUD.Toast("Get inside your lab.", new Color(1f, 0.5f, 0.4f)); return false; }
+        int total = 0;
+        for (int m = 0; m < Items.MatCount; m++)
+        {
+            if (mix[m] > Have(m)) { GameHUD.Toast("You don't have that much " + Items.MatNames[m] + ".", new Color(1f, 0.5f, 0.4f)); return false; }
+            total += mix[m];
+        }
+        if (total == 0) { GameHUD.Toast("Put some materials in first.", Color.white); return false; }
+
+        Recipe r = Items.Match(st, mix);
+        if (r == null)
+        {
+            Sfx.Play("error", 0.5f);
+            Sfx.Play("overheat", 0.35f, 1.3f);
+            Fx.Puff(Center + transform.forward * 0.8f, new Color(0.6f, 0.6f, 0.6f, 0.5f), 6, 0.3f, 0.3f, 1.2f, Vector3.up * 0.8f);
+            int unknown = 0;
+            foreach (Recipe x in Items.For(st)) if (!Discoveries.Knows(x.id)) unknown++;
+            GameHUD.Toast("*fizzle*  Nothing happened. " + (unknown > 0 ? unknown + " secret recipe" + (unknown == 1 ? "" : "s") + " left to find here." : "You've found everything here!"), new Color(0.8f, 0.8f, 0.8f));
+            return false;
+        }
+        string problem = CraftProblem(r);
+        if (problem != null)
+        {
+            Sfx.Play("error", 0.5f);
+            GameHUD.Toast("Something's happening... but: " + problem, new Color(1f, 0.7f, 0.4f));
+            return false;
+        }
+        bool isNew = Discoveries.Learn(r.id);
+        Craft(r);
+        if (isNew)
+        {
+            GameHUD.Banner("DISCOVERED!", r.name + "  -  " + r.desc, r.color);
+            Sfx.Play("upgrade", 0.8f);
+        }
+        return true;
     }
 
     // Put something in the hotbar (potions of the same kind stack).

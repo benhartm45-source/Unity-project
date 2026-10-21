@@ -435,6 +435,7 @@ public static partial class MadLabKitMenu
         SaveNode("Node_Crystal", Mat.Crystal, CrystalNodeParts(), Solid.Shape, new Color(0.4f, 0.85f, 1f));
         SaveNode("Node_Metal", Mat.Metal, MetalNodeParts(), Solid.Shape, new Color(0.8f, 0.85f, 1f));
         SaveNode("Node_Chemical", Mat.Chemical, ChemicalNodeParts(), Solid.Shape, new Color(0.8f, 0.4f, 1f));
+        MakeMoreNodes();
     }
 
     static void SaveNode(string name, Mat mat, List<Part> parts, Solid col, Color light)

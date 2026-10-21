@@ -195,7 +195,8 @@ public class Laboratory : MonoBehaviour, IDamageable
     public void SetupRival(int seed)
     {
         var r = new System.Random(seed);
-        for (int m = 0; m < Items.MatCount; m++) storage[m] = 1 + r.Next(5);
+        for (int m = 0; m < Items.MatCount; m++)
+            storage[m] = m < Items.BaseMatCount ? 1 + r.Next(5) : (r.Next(4) == 0 ? 1 + r.Next(2) : 0);
         if (r.Next(2) == 0) Build(ItemId.WallsI, true);
         if (r.Next(3) == 0) Build(ItemId.Forcefield, true);
         if (r.Next(3) == 0) Build(ItemId.Turret, true);

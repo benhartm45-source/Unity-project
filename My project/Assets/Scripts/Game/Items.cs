@@ -4,7 +4,10 @@ using UnityEngine;
 // EVERYTHING YOU CAN COLLECT AND CRAFT.
 // Want to change a recipe, a brew time or a description? It's all in the big list below.
 //
-// Materials (5):  Herb, Slime, Crystal, Metal, Chemical - gathered from glowing spots around the map.
+// Materials (25): the first 5 (Herb, Slime, Crystal, Metal, Chemical) are what today's recipes use.
+//   The other 20 come from the bigger map (forests, caves, the office building, the meteor crater) and are
+//   there for the recipes still to come. To add a material: add it to Mat, MatNames, MatColors and MatSound.
+// Recipes are SECRET: players find them by putting materials into a station and pressing COMBINE.
 // Stations (in your lab only):
 //   Brewing Stand  - potions (they take a few seconds to brew, you can walk away meanwhile)
 //   Workbench      - weapons and armour
@@ -12,7 +15,14 @@ using UnityEngine;
 //   Lab Terminal   - lab upgrades: stronger walls, forcefield, turret, slime traps, repairs
 //   Storage        - where your materials go when you walk into your lab
 
-public enum Mat { Herb, Slime, Crystal, Metal, Chemical }
+public enum Mat
+{
+    Herb, Slime, Crystal, Metal, Chemical,
+    Berry, Wood, Sap, Mushroom, Moss, Petal,                                    // forests and fields
+    Coal, IronOre, GoldOre, Sulfur, Glowstone, Uranium, Obsidian,               // caves
+    Circuit, CopperWire, Battery, Glass, Plastic,                               // the office building
+    Meteorite, Stardust,                                                        // the meteor crater
+}
 public enum ItemKind { Weapon, Potion, Throwable, Armor, Enchant, Upgrade }
 public enum Station { Brew, Workbench, Enchant, Storage, Terminal }
 public enum Element { None, Fire, Ice, Poison, Slime, Shock }
@@ -32,7 +42,7 @@ public class Recipe
     public string name, desc;
     public ItemKind kind;
     public Station station;
-    public int[] cost;          // Herb, Slime, Crystal, Metal, Chemical
+    public int[] cost;          // how many of each material (in Mat order)
     public float time;          // brewing seconds (potions) or work seconds (everything else)
     public int makes = 1;       // how many you get
     public Color color;
@@ -42,8 +52,16 @@ public class Recipe
 
 public static class Items
 {
-    public const int MatCount = 5;
-    public static readonly string[] MatNames = { "Herb", "Slime", "Crystal", "Metal", "Chemical" };
+    public const int MatCount = 25;
+    public const int BaseMatCount = 5;          // the original five (lab storage bins, rival lab loot)
+    public static readonly string[] MatNames =
+    {
+        "Herb", "Slime", "Crystal", "Metal", "Chemical",
+        "Berry", "Wood", "Sap", "Mushroom", "Moss", "Petal",
+        "Coal", "Iron Ore", "Gold Ore", "Sulfur", "Glowstone", "Uranium", "Obsidian",
+        "Circuit Board", "Copper Wire", "Battery", "Glass", "Plastic",
+        "Meteorite", "Stardust",
+    };
     public static readonly Color[] MatColors =
     {
         new Color(0.40f, 0.95f, 0.30f),     // herb - leafy green
@@ -51,9 +69,44 @@ public static class Items
         new Color(0.40f, 0.85f, 1.00f),     // crystal - ice blue
         new Color(0.75f, 0.78f, 0.82f),     // metal - steel
         new Color(0.80f, 0.40f, 1.00f),     // chemical - purple
+        new Color(0.95f, 0.25f, 0.45f),     // berry - red
+        new Color(0.72f, 0.50f, 0.30f),     // wood - brown
+        new Color(1.00f, 0.70f, 0.20f),     // sap - amber
+        new Color(1.00f, 0.45f, 0.40f),     // mushroom - red cap
+        new Color(0.45f, 0.70f, 0.30f),     // moss - mossy green
+        new Color(1.00f, 0.62f, 0.85f),     // petal - pink
+        new Color(0.50f, 0.50f, 0.55f),     // coal - dark grey
+        new Color(0.85f, 0.52f, 0.40f),     // iron ore - rusty
+        new Color(1.00f, 0.82f, 0.25f),     // gold ore - gold
+        new Color(0.95f, 0.95f, 0.30f),     // sulfur - yellow
+        new Color(1.00f, 0.95f, 0.65f),     // glowstone - warm white
+        new Color(0.55f, 1.00f, 0.20f),     // uranium - radioactive green
+        new Color(0.60f, 0.40f, 0.85f),     // obsidian - dark purple
+        new Color(0.25f, 0.85f, 0.45f),     // circuit board - pcb green
+        new Color(0.95f, 0.55f, 0.30f),     // copper wire - copper
+        new Color(0.40f, 0.60f, 1.00f),     // battery - blue
+        new Color(0.75f, 0.95f, 1.00f),     // glass - pale blue
+        new Color(0.95f, 0.95f, 0.95f),     // plastic - white
+        new Color(1.00f, 0.40f, 0.20f),     // meteorite - glowing orange
+        new Color(0.85f, 0.70f, 1.00f),     // stardust - lilac
+    };
+    // which pickup sound each material uses (Resources/Audio/pickup_<name>)
+    public static readonly string[] MatSound =
+    {
+        "herb", "slime", "crystal", "metal", "chemical",
+        "herb", "metal", "slime", "herb", "herb", "herb",
+        "metal", "metal", "crystal", "chemical", "crystal", "chemical", "crystal",
+        "metal", "metal", "metal", "crystal", "metal",
+        "crystal", "crystal",
     };
 
-    static int[] C(int herb = 0, int slime = 0, int crystal = 0, int metal = 0, int chem = 0) => new[] { herb, slime, crystal, metal, chem };
+    // Recipe costs only use the first five materials for now; everything else is 0.
+    static int[] C(int herb = 0, int slime = 0, int crystal = 0, int metal = 0, int chem = 0)
+    {
+        var c = new int[MatCount];
+        c[0] = herb; c[1] = slime; c[2] = crystal; c[3] = metal; c[4] = chem;
+        return c;
+    }
 
     public static readonly Recipe[] All =
     {
@@ -84,7 +137,7 @@ public static class Items
             desc = "+50 armour. Bolted-together metal plates.", color = new Color(0.65f, 0.65f, 0.68f), icon = "armor_scrap" },
         new Recipe { id = ItemId.CrystalArmor, name = "Crystal Armour", kind = ItemKind.Armor, station = Station.Workbench, cost = C(crystal: 2, metal: 3), time = 2f,
             desc = "+100 armour. Glowing crystal plates.", color = new Color(0.4f, 0.9f, 1f), icon = "armor_crystal" },
-        new Recipe { id = ItemId.BounceBoots, name = "Bounce Boots", kind = ItemKind.Armor, station = Station.Workbench, cost = C(slime: 2, metal: 1), time = 1.5f,
+        new Recipe { id = ItemId.BounceBoots, name = "Bounce Boots", kind = ItemKind.Armor, station = Station.Workbench, cost = C(slime: 3, metal: 1), time = 1.5f,
             desc = "Slimy springy boots: double jump and no fall damage.", color = new Color(0.4f, 1f, 0.5f), icon = "boots" },
 
         // ---------------- Enchants (Enchanting Table) ----------------
@@ -133,6 +186,18 @@ public static class Items
     }
 
     public static bool IsWeapon(ItemId id) => Get(id).kind == ItemKind.Weapon;
+
+    // EXPERIMENTING: the recipe at this station whose cost is exactly this mix (null = nothing happens).
+    public static Recipe Match(Station s, int[] mix)
+    {
+        foreach (Recipe r in For(s))
+        {
+            bool same = true;
+            for (int m = 0; m < MatCount && same; m++) if (r.cost[m] != mix[m]) same = false;
+            if (same) return r;
+        }
+        return null;
+    }
 
     public static Element EnchantElement(ItemId id)
     {
@@ -184,7 +249,52 @@ public static class Items
         return t;
     }
 
-    public static Texture2D MatIcon(int m) => Icon("mat_" + MatNames[m].ToLowerInvariant());
+    public static Texture2D MatIcon(int m) => Icon("mat_" + MatNames[m].ToLowerInvariant().Replace(' ', '_'));
+}
+
+// The recipes you've figured out (saved on this computer, so they stay found between matches).
+public static class Discoveries
+{
+    static HashSet<ItemId> known;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() => known = null;
+
+    static void Load()
+    {
+        if (known != null) return;
+        known = new HashSet<ItemId>();
+        foreach (Recipe r in Items.All)
+            if (PlayerPrefs.GetInt("found." + r.id, 0) == 1) known.Add(r.id);
+    }
+
+    public static bool Knows(ItemId id) { Load(); return known.Contains(id); }
+
+    // Returns true the first time.
+    public static bool Learn(ItemId id)
+    {
+        Load();
+        if (!known.Add(id)) return false;
+        PlayerPrefs.SetInt("found." + id, 1);
+        PlayerPrefs.Save();
+        return true;
+    }
+
+    public static List<Recipe> Known(Station s)
+    {
+        var list = new List<Recipe>();
+        foreach (Recipe r in Items.For(s)) if (Knows(r.id)) list.Add(r);
+        return list;
+    }
+
+    // Wipe them all (Settings > Forget recipes).
+    public static void Forget()
+    {
+        Load();
+        foreach (Recipe r in Items.All) PlayerPrefs.DeleteKey("found." + r.id);
+        PlayerPrefs.Save();
+        known.Clear();
+    }
 }
 
 // One thing in your hotbar.

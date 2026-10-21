@@ -3,7 +3,7 @@ using UnityEngine;
 
 // THE MATCH: phases, the shrinking zone, raid drones, winning and losing.
 //
-//   COLLECT     (60 s)  run around gathering materials. Every lab has a gold starter shield.
+//   COLLECT     (3 min) run around gathering materials. Every lab has a gold starter shield.
 //   EXPERIMENT  (30 s)  last chance to craft and brew before the shields drop.
 //   MADNESS             shields are down - labs can be attacked. After a while the zone starts closing in:
 //                       outside it you take damage and labs melt down. Last scientist standing wins.
@@ -20,7 +20,7 @@ public class MLGame : MonoBehaviour
     public static bool ArenaPresent => Laboratory.All.Count > 0;
 
     public enum Phase { Collect, Experiment, Madness, Over }
-    public const float CollectTime = 60f, ExperimentTime = 30f, ZoneDelay = 40f, ZoneShrinkTime = 170f, ZoneEndRadius = 16f;
+    public const float CollectTime = 180f, ExperimentTime = 30f, ZoneDelay = 40f, ZoneShrinkTime = 230f, ZoneEndRadius = 18f;
 
     public Phase phase { get; private set; }
     public float phaseLeft { get; private set; }
@@ -55,6 +55,7 @@ public class MLGame : MonoBehaviour
         I = go.AddComponent<MLGame>();
         go.AddComponent<GameHUD>();
         go.AddComponent<NetPlayers>();
+        go.AddComponent<NetNodes>();
         GameCam.Ensure();
         if (!ArenaPresent && GameCam.I != null)
         {

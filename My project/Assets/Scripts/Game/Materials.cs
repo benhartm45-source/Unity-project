@@ -4,6 +4,7 @@ using UnityEngine;
 // MATERIAL SPOTS: the glowing herb plants, slime pools, crystal clusters, scrap piles and chemical barrels on the map.
 // Walk up and press E to gather (2 at a time). Each spot has 3 gathers, then it regrows after a while.
 // They're prefabs in Assets/MadLab/Prefabs (Node_Herb, Node_Slime, ...) - drag more into your map anywhere you like.
+// ONLINE: the host is in charge of every spot. If anyone gathers, it shrinks (and regrows) for everybody - see NetNodes.cs.
 public class MaterialNode : MonoBehaviour, IInteractable
 {
     public static readonly List<MaterialNode> All = new List<MaterialNode>();
@@ -20,11 +21,14 @@ public class MaterialNode : MonoBehaviour, IInteractable
 
     int left;
     float regrowAt = -1f;
+    [System.NonSerialized] public int netId = -1;     // same number on every computer (set by NetNodes)
     Vector3 baseScale;
     Light glow;
     float pulse;
 
     public bool Available => left > 0;
+    public int Left => left;
+    public float RegrowIn => regrowAt > 0f ? Mathf.Max(0f, regrowAt - Time.time) : -1f;
     public Vector3 InteractPoint => transform.position + Vector3.up * 0.6f;
     public float InteractRange => 2.6f;
 
@@ -56,16 +60,42 @@ public class MaterialNode : MonoBehaviour, IInteractable
 
     public void Use(Player p) { if (Available) p.StartGather(this); }
 
+    // Your scientist finished the gather animation.
     public void Harvest(Player p)
     {
         if (!Available) return;
+        if (Net.IsClient && netId >= 0) { NetNodes.RequestGather(this); return; }     // ask the host
+        TakeCharge();
+        Give(p);
+        NetNodes.Changed(this);
+    }
+
+    // One gather's worth comes off the spot (host / solo only).
+    public void TakeCharge()
+    {
+        if (left <= 0) return;
         left--;
-        p.AddMaterial((int)mat, amount);
-        Color c = Items.MatColors[(int)mat];
-        Fx.Burst(InteractPoint, c, 14, 3.5f, 0.09f, 0.6f, -6f);
-        Sfx.At("pickup_" + Items.MatNames[(int)mat].ToLowerInvariant(), InteractPoint, 0.8f);
-        Sfx.Play("pickup", 0.5f, 1f + left * 0.08f);
         if (left <= 0) regrowAt = Time.time + regrowTime;
+        Burst();
+    }
+
+    public void Give(Player p)
+    {
+        p.AddMaterial((int)mat, amount);
+        Sfx.At("pickup_" + Items.MatSound[(int)mat], InteractPoint, 0.8f);
+        Sfx.Play("pickup", 0.5f, 1f + left * 0.08f);
+    }
+
+    void Burst() => Fx.Burst(InteractPoint, Items.MatColors[(int)mat], 14, 3.5f, 0.09f, 0.6f, -6f);
+
+    // The host told us how this spot looks now.
+    public void SetState(int newLeft, float regrowIn)
+    {
+        newLeft = Mathf.Clamp(newLeft, 0, charges);
+        if (newLeft < left) Burst();                                   // someone gathered it
+        else if (newLeft > left && newLeft == charges && left == 0) Fx.Burst(InteractPoint, Items.MatColors[(int)mat], 10, 2f, 0.08f, 0.6f, 1f);
+        left = newLeft;
+        regrowAt = regrowIn >= 0f ? Time.time + regrowIn : -1f;
     }
 
     void Update()
@@ -79,11 +109,12 @@ public class MaterialNode : MonoBehaviour, IInteractable
             glow.enabled = left > 0;
             glow.intensity = 1.2f + 0.4f * Mathf.Sin(pulse * 2.5f);
         }
-        if (regrowAt > 0f && Time.time >= regrowAt)
+        if (regrowAt > 0f && Time.time >= regrowAt && !Net.IsClient)      // online, only the host regrows spots
         {
             left = charges;
             regrowAt = -1f;
             Fx.Burst(InteractPoint, Items.MatColors[(int)mat], 10, 2f, 0.08f, 0.6f, 1f);
+            NetNodes.Changed(this);
         }
         // sparkle so you can spot them
         if (left > 0 && Random.value < Time.deltaTime * 1.5f)
@@ -117,7 +148,8 @@ public class MaterialPickup : MonoBehaviour
         Color c = Items.MatColors[mat];
         p.look = new GameObject("look").transform;
         p.look.SetParent(go.transform, false);
-        PrimitiveType shape = mat == (int)Mat.Crystal ? PrimitiveType.Capsule : mat == (int)Mat.Metal ? PrimitiveType.Cube : PrimitiveType.Sphere;
+        string snd = Items.MatSound[mat];
+        PrimitiveType shape = snd == "crystal" ? PrimitiveType.Capsule : snd == "metal" ? PrimitiveType.Cube : PrimitiveType.Sphere;
         float size = 0.22f + 0.05f * amount;
         Gfx.Part(p.look, shape, Vector3.zero, Vector3.one * size, Gfx.Glow(c, 1.8f), new Vector3(20f, 0f, 30f), false);
         Gfx.Part(p.look, PrimitiveType.Sphere, Vector3.zero, Vector3.one * size * 2f, Gfx.Clear(new Color(c.r, c.g, c.b, 0.18f)), default, false);

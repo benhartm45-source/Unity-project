@@ -11,8 +11,9 @@ using UnityEngine.Rendering;
 //                           rocks, crystals, crates, barrels, fences, pipes, lamps, a reactor... plus the
 //                           material spots (Node_Herb, Node_Crystal, ...) and the LABORATORY.
 //                           Everything lands in Assets/MadLab/Prefabs - drag them into the scene anywhere.
-//   2. Create Lab Arena   - builds the whole arena in your scene: a 200 x 200 m Terrain with a big field in the
+//   2. Create Lab Arena   - builds the whole arena in your scene: a 300 x 300 m Terrain with a big field in the
 //                           middle, hills around the edge, a pond, a toxic swamp, a crystal crag, forests,
+//                           an old office building, a meteor crater, caves in the hills,
 //                           paths, 8 laboratories in a ring, material spots, target dummies and markers.
 //                           Then edit it however you like: Terrain tools to sculpt / paint / plant trees,
 //                           move the labs, add or remove material spots. Press Play and hit PLAY.
@@ -68,6 +69,9 @@ public static partial class MadLabKitMenu
             EditorUtility.DisplayProgressBar("Mad Lab Kit", "Making material spots", 0.65f);
             MakeNodes();
 
+            EditorUtility.DisplayProgressBar("Mad Lab Kit", "Building the office, caves and meteor", 0.7f);
+            MakeLandmarks();
+
             EditorUtility.DisplayProgressBar("Mad Lab Kit", "Building the reactor", 0.75f);
             MakeReactor();
 
@@ -93,7 +97,8 @@ public static partial class MadLabKitMenu
             "Editing the map:\n" +
             "- Select 'Lab Arena > Terrain' and use the Terrain tools to raise / lower ground, paint ground, plant trees or grass.\n" +
             "- Move the labs (Lab Arena > Labs). Each has a Lab Number (1-8). Lab 1 is yours in solo play.\n" +
-            "- Drag Node_Herb / Node_Slime / Node_Crystal / Node_Metal / Node_Chemical prefabs anywhere for more material spots.\n" +
+            "- Drag any Node_ prefab (Node_Herb, Node_Berry, Node_Coal, Node_Circuit, ...) anywhere for more material spots.\n" +
+            "- Office_Building, Cave and Meteor are prefabs too - drag in more landmarks if you like.\n" +
             "- DummySpot markers = target dummies. DroneSpawn markers = where raid drones come from. ZoneCenter = where the zone shrinks to.\n" +
             "- Open the Laboratory prefab to change how every lab looks (keep the part names the same).", "OK");
     }
@@ -250,7 +255,8 @@ public static partial class MadLabKitMenu
         chalk = MakeMat("Chalk", null, new Color(0.92f, 0.95f, 0.92f), 0.1f);
         board = MakeMat("Chalkboard", null, new Color(0.12f, 0.22f, 0.17f), 0.15f);
         binGlow = new Material[Items.MatCount];
-        for (int m = 0; m < Items.MatCount; m++) binGlow[m] = MakeMat("Glow_" + Items.MatNames[m], null, Items.MatColors[m], 0.6f, 0f, 1.8f);
+        for (int m = 0; m < Items.MatCount; m++) binGlow[m] = MakeMat("Glow_" + Items.MatNames[m].Replace(' ', '_'), null, Items.MatColors[m], 0.6f, 0f, 1.8f);
+        MakeMoreMaterials();
     }
 
     // ================================================================

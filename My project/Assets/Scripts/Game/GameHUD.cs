@@ -5,7 +5,8 @@ using UnityEngine.InputSystem;
 // EVERYTHING ON SCREEN DURING A MATCH:
 // phase + timer, your lab's health, your health / armour / effects, the hotbar, materials, crosshair,
 // "Press E" prompts, the station menus (brewing, workbench, enchanting, storage, lab terminal),
-// the pause menu (with all the recipes), and the win / lose screen.
+// the pause menu (with the recipes you've discovered), and the win / lose screen.
+// Stations don't show recipes: you put materials into the MIX and press COMBINE to find out what they make.
 public class GameHUD : MonoBehaviour
 {
     static GameHUD I;
@@ -25,6 +26,8 @@ public class GameHUD : MonoBehaviour
 
     LabStation station;
     int stationSel;
+    readonly int[] mix = new int[Items.MatCount];      // what's in the station's mix right now
+    const int MatCols = 10;
     bool paused, endShown, endWin, howTo;
     int pauseSel;
     float openedAt;
@@ -88,6 +91,7 @@ public class GameHUD : MonoBehaviour
         I.station = s;
         I.stationSel = 0;
         I.openedAt = Time.unscaledTime;
+        System.Array.Clear(I.mix, 0, I.mix.Length);
     }
 
     public static void CloseAll()
@@ -134,14 +138,33 @@ public class GameHUD : MonoBehaviour
                 Sfx.Play("station_close", 0.4f);
                 return;
             }
-            List<Recipe> list = Items.For(station.type);
-            if (list.Count > 0)
+            if (station.type == Station.Storage || Time.unscaledTime - openedAt < 0.15f) return;
+            List<int> mats = StationMats(p);
+            List<Recipe> known = Discoveries.Known(station.type);
+            int cells = mats.Count + known.Count;
+            if (cells > 0)
             {
-                if (NavDown()) { stationSel = (stationSel + 1) % list.Count; Sfx.Play("tick", 0.3f); }
-                if (NavUp()) { stationSel = (stationSel - 1 + list.Count) % list.Count; Sfx.Play("tick", 0.3f); }
-                bool confirm = (k != null && (k.enterKey.wasPressedThisFrame || k.spaceKey.wasPressedThisFrame || k.eKey.wasPressedThisFrame)) || (g != null && g.buttonSouth.wasPressedThisFrame);
-                if (confirm && Time.unscaledTime - openedAt > 0.15f) p.Craft(list[Mathf.Clamp(stationSel, 0, list.Count - 1)]);
+                stationSel = Mathf.Clamp(stationSel, 0, cells - 1);
+                int was = stationSel;
+                int cols = stationSel < mats.Count ? MatCols : 2;
+                if (NavRight()) stationSel = Mathf.Min(cells - 1, stationSel + 1);
+                if (NavLeft()) stationSel = Mathf.Max(0, stationSel - 1);
+                if (NavDown()) stationSel = Mathf.Min(cells - 1, stationSel + cols);
+                if (NavUp()) stationSel = Mathf.Max(0, stationSel - cols);
+                if (stationSel != was) Sfx.Play("tick", 0.3f);
+                bool confirm = (k != null && (k.enterKey.wasPressedThisFrame || k.spaceKey.wasPressedThisFrame)) || (g != null && g.buttonSouth.wasPressedThisFrame);
+                bool remove = (k != null && (k.backspaceKey.wasPressedThisFrame || k.deleteKey.wasPressedThisFrame)) || (g != null && g.buttonWest.wasPressedThisFrame);
+                if (confirm)
+                {
+                    if (stationSel < mats.Count) AddToMix(p, mats[stationSel]);
+                    else p.Craft(known[stationSel - mats.Count]);
+                }
+                if (remove && stationSel < mats.Count) TakeFromMix(mats[stationSel]);
             }
+            bool combine = (k != null && (k.eKey.wasPressedThisFrame || k.cKey.wasPressedThisFrame)) || (g != null && g.buttonNorth.wasPressedThisFrame);
+            bool clear = (k != null && k.rKey.wasPressedThisFrame) || (g != null && g.leftShoulder.wasPressedThisFrame);
+            if (combine) Combine(p);
+            if (clear) ClearMix();
             return;
         }
 
@@ -168,6 +191,18 @@ public class GameHUD : MonoBehaviour
     {
         var k = Keyboard.current; var g = Gamepad.current;
         return (k != null && (k.downArrowKey.wasPressedThisFrame || k.sKey.wasPressedThisFrame)) || (g != null && g.dpad.down.wasPressedThisFrame);
+    }
+
+    static bool NavRight()
+    {
+        var k = Keyboard.current; var g = Gamepad.current;
+        return (k != null && (k.rightArrowKey.wasPressedThisFrame || k.dKey.wasPressedThisFrame)) || (g != null && g.dpad.right.wasPressedThisFrame);
+    }
+
+    static bool NavLeft()
+    {
+        var k = Keyboard.current; var g = Gamepad.current;
+        return (k != null && (k.leftArrowKey.wasPressedThisFrame || k.aKey.wasPressedThisFrame)) || (g != null && g.dpad.left.wasPressedThisFrame);
     }
 
     static bool NavUp()
@@ -508,21 +543,31 @@ public class GameHUD : MonoBehaviour
 
     void DrawMaterials(Player p)
     {
-        float w = 260f, x = W - w - 24f, rowH = 40f;
-        float y = 1080f - 24f - rowH * Items.MatCount - 34f;
-        Box(x, y, w, rowH * Items.MatCount + 34f, Panel);
+        // only what you've actually got (there are lots of materials)
+        Laboratory lab = p.MyLab;
+        bool labOk = lab != null && !lab.Destroyed;
+        var have = new List<int>();
+        for (int m = 0; m < Items.MatCount; m++) if (p.backpack[m] > 0 || (labOk && lab.storage[m] > 0)) have.Add(m);
+        const int maxRows = 14;
+        int rows = Mathf.Min(have.Count, maxRows);
+        float w = 290f, x = W - w - 24f, rowH = 30f;
+        float h = 34f + Mathf.Max(1, rows) * rowH + (have.Count > maxRows ? 26f : 0f) + 6f;
+        float y = 1080f - 24f - h;
+        Box(x, y, w, h, Panel);
         Text(x + 14f, y + 4f, w, 26f, "MATERIALS", 15, Dim);
         Text(x, y + 4f, w - 14f, 26f, "carried  ·  in lab", 13, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleRight, false);
-        Laboratory lab = p.MyLab;
-        for (int m = 0; m < Items.MatCount; m++)
+        if (have.Count == 0) Text(x + 14f, y + 32f, w, rowH, "nothing yet - go gather!", 15, Dim, TextAnchor.MiddleLeft, false);
+        for (int i = 0; i < rows; i++)
         {
-            float yy = y + 32f + m * rowH;
-            Icon(x + 12f, yy + 2f, 34f, Items.MatIcon(m), Items.MatColors[m]);
-            Text(x + 54f, yy, 120f, rowH, Items.MatNames[m], 17, Items.MatColors[m], TextAnchor.MiddleLeft, false);
-            Text(x, yy, w - 80f, rowH, p.backpack[m].ToString(), 20, p.backpack[m] > 0 ? Color.white : Dim, TextAnchor.MiddleRight);
-            int st = lab != null && !lab.Destroyed ? lab.storage[m] : 0;
-            Text(x, yy, w - 14f, rowH, st.ToString(), 17, st > 0 ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleRight);
+            int m = have[i];
+            float yy = y + 32f + i * rowH;
+            Icon(x + 10f, yy + 2f, 26f, Items.MatIcon(m), Items.MatColors[m]);
+            Text(x + 42f, yy, 150f, rowH, Items.MatNames[m], 15, Items.MatColors[m], TextAnchor.MiddleLeft, false);
+            Text(x, yy, w - 76f, rowH, p.backpack[m].ToString(), 17, p.backpack[m] > 0 ? Color.white : Dim, TextAnchor.MiddleRight);
+            int st = labOk ? lab.storage[m] : 0;
+            Text(x, yy, w - 14f, rowH, st.ToString(), 15, st > 0 ? new Color(0.6f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleRight);
         }
+        if (have.Count > maxRows) Text(x + 14f, y + 32f + rows * rowH, w, 24f, "+" + (have.Count - maxRows) + " more (see Storage in your lab)", 13, Dim, TextAnchor.MiddleLeft, false);
         // "+2 Herb" popups
         for (int i = popups.Count - 1; i >= 0; i--)
         {
@@ -530,7 +575,7 @@ public class GameHUD : MonoBehaviour
             if (age > 1.6f) { popups.RemoveAt(i); continue; }
             float a = age < 1.2f ? 1f : 1f - (age - 1.2f) / 0.4f;
             int m = popups[i].mat;
-            Text(x - 200f, y - 10f - (popups.Count - 1 - i) * 30f - age * 20f, 190f, 30f, "+" + popups[i].n + " " + Items.MatNames[m], 22, new Color(Items.MatColors[m].r, Items.MatColors[m].g, Items.MatColors[m].b, a), TextAnchor.MiddleRight);
+            Text(x - 230f, y - 10f - (popups.Count - 1 - i) * 30f - age * 20f, 220f, 30f, "+" + popups[i].n + " " + Items.MatNames[m], 22, new Color(Items.MatColors[m].r, Items.MatColors[m].g, Items.MatColors[m].b, a), TextAnchor.MiddleRight);
         }
     }
 
@@ -617,7 +662,7 @@ public class GameHUD : MonoBehaviour
         foreach (Laboratory l in Laboratory.All)
         {
             if (l == null || l == p.MyLab || l.Destroyed || MLGame.ShieldsUp) continue;
-            if (Vector3.Distance(l.transform.position, p.transform.position) < 70f)
+            if (Vector3.Distance(l.transform.position, p.transform.position) < 100f)
                 Marker(cam, l.transform.position + Vector3.up * 7f, l.ColorName + " LAB  " + Mathf.CeilToInt(l.hp), l.LabColor * 0.9f, false);
         }
     }
@@ -744,11 +789,51 @@ public class GameHUD : MonoBehaviour
     // Station menus
     // ================================================================
 
+    // Materials you can put in the mix (anything you have, carried or stored).
+    static List<int> StationMats(Player p)
+    {
+        var list = new List<int>();
+        for (int m = 0; m < Items.MatCount; m++) if (p.Have(m) > 0) list.Add(m);
+        return list;
+    }
+
+    void AddToMix(Player p, int m)
+    {
+        if (mix[m] >= p.Have(m)) { Sfx.Play("error", 0.35f); return; }
+        mix[m]++;
+        Sfx.Play("tick", 0.4f, 1f + mix[m] * 0.05f);
+    }
+
+    void TakeFromMix(int m)
+    {
+        if (mix[m] <= 0) return;
+        mix[m]--;
+        Sfx.Play("tick", 0.3f, 0.85f);
+    }
+
+    void ClearMix()
+    {
+        System.Array.Clear(mix, 0, mix.Length);
+        Sfx.Play("tick", 0.3f, 0.7f);
+    }
+
+    void Combine(Player p)
+    {
+        if (station == null) return;
+        if (p.Experiment(station.type, mix)) System.Array.Clear(mix, 0, mix.Length);
+    }
+
+    static bool RightClicked(Rect virtualRect)
+    {
+        Event e = Event.current;
+        return e.type == EventType.MouseDown && e.button == 1 && R(virtualRect.x, virtualRect.y, virtualRect.width, virtualRect.height).Contains(e.mousePosition);
+    }
+
     void DrawStation(Player p)
     {
         LabStation st = station;
         Laboratory lab = st.lab;
-        float x = 60f, y = 110f, w = 820f, h = 860f;
+        float x = 60f, y = 60f, w = 1120f, h = 960f;
         Box(0f, 0f, W, 1080f, new Color(0f, 0f, 0f, 0.35f));
         Box(x, y, w, h, new Color(0.03f, 0.05f, 0.07f, 0.94f));
         Box(x, y, w, 6f, lab.LabColor);
@@ -756,10 +841,10 @@ public class GameHUD : MonoBehaviour
         string sub;
         switch (st.type)
         {
-            case Station.Brew: sub = "Potions take a few seconds to brew - you can walk away while they bubble."; break;
-            case Station.Workbench: sub = "Weapons go in your hotbar. Armour goes straight on."; break;
-            case Station.Enchant: sub = "Enchants the weapon you're HOLDING. Pick it in your hotbar first."; break;
-            case Station.Terminal: sub = "Make your lab tougher. Destroyed labs can't craft!"; break;
+            case Station.Brew: sub = "Things that bubble and fizz. Put materials in the mix and see what brews."; break;
+            case Station.Workbench: sub = "Things you can hold or wear. Mix materials and see what you can build."; break;
+            case Station.Enchant: sub = "Magic for the weapon you're HOLDING. Pick it in your hotbar first, then experiment."; break;
+            case Station.Terminal: sub = "Upgrades for your lab itself. Feed it materials and see what it builds."; break;
             default: sub = "Materials you carry are stored here automatically when you walk in."; break;
         }
         Text(x + 30f, y + 68f, w - 60f, 30f, sub, 17, Dim, TextAnchor.MiddleLeft, false);
@@ -769,15 +854,18 @@ public class GameHUD : MonoBehaviour
 
         if (st.type == Station.Storage)
         {
+            const int cols = 5;
+            float tw = (w - 60f - (cols - 1) * 10f) / cols, th = 104f;
             for (int m = 0; m < Items.MatCount; m++)
             {
-                float ry = yy + m * 92f;
-                Box(x + 30f, ry, w - 60f, 80f, new Color(1f, 1f, 1f, 0.04f));
-                Icon(x + 44f, ry + 8f, 64f, Items.MatIcon(m), Items.MatColors[m]);
-                Text(x + 124f, ry, 300f, 80f, Items.MatNames[m], 30, Items.MatColors[m]);
-                Text(x, ry, w - 60f, 80f, lab.storage[m].ToString(), 40, Color.white, TextAnchor.MiddleRight);
+                float tx = x + 30f + (m % cols) * (tw + 10f), ty = yy + (m / cols) * (th + 10f);
+                int n = lab.storage[m];
+                Box(tx, ty, tw, th, new Color(1f, 1f, 1f, n > 0 ? 0.07f : 0.025f));
+                Icon(tx + 10f, ty + 12f, 48f, Items.MatIcon(m), n > 0 ? Items.MatColors[m] : Items.MatColors[m] * 0.4f);
+                Text(tx + 66f, ty + 6f, tw - 70f, 30f, Items.MatNames[m], 17, n > 0 ? Items.MatColors[m] : new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleLeft, true);
+                Text(tx + 66f, ty + 40f, tw - 80f, 56f, n.ToString(), 34, n > 0 ? Color.white : new Color(1f, 1f, 1f, 0.25f), TextAnchor.MiddleLeft);
             }
-            Text(x + 30f, yy + 470f, w - 60f, 120f, "If your lab gets destroyed, everything stored here spills out for anyone to take. If YOU get knocked out, you drop what you're carrying (not what's stored).", 18, Dim, TextAnchor.UpperLeft, false, true);
+            Text(x + 30f, yy + 5 * (th + 10f) + 10f, w - 60f, 90f, "If your lab gets destroyed, everything stored here spills out for anyone to take. If YOU get knocked out, you drop what you're carrying (not what's stored).", 18, Dim, TextAnchor.UpperLeft, false, true);
             return;
         }
 
@@ -804,47 +892,115 @@ public class GameHUD : MonoBehaviour
             yy += 40f;
         }
 
-        List<Recipe> list = Items.For(st.type);
-        float avail = y + h - 20f - yy;
-        float ch = Mathf.Min(104f, avail / Mathf.Max(1, list.Count));
-        for (int i = 0; i < list.Count; i++)
+        // ---- your materials (click to put one in the mix) ----
+        List<int> mats = StationMats(p);
+        List<Recipe> known = Discoveries.Known(st.type);
+        Text(x + 30f, yy, w, 28f, "YOUR MATERIALS", 17, new Color(0.7f, 0.45f, 1f));
+        Text(x, yy, w - 30f, 28f, pad ? "A  add one   ·   X  take one out" : "click to add one   ·   right-click to take one out", 14, Dim, TextAnchor.MiddleRight, false);
+        yy += 32f;
+        float tile = (w - 60f - (MatCols - 1) * 6f) / MatCols, tileH = 92f;
+        if (mats.Count == 0)
         {
-            Recipe r = list[i];
-            float ry = yy + i * ch;
-            string problem = p.CraftProblem(r);
-            bool ok = problem == null;
-            bool over = Hover(x + 30f, ry, w - 60f, ch - 8f);
-            if (over && Event.current.type == EventType.MouseMove) stationSel = i;
+            Text(x + 30f, yy, w - 60f, 40f, "You don't have any materials. Go out and gather some!", 18, Dim, TextAnchor.MiddleLeft, false);
+            yy += 50f;
+        }
+        for (int i = 0; i < mats.Count; i++)
+        {
+            int m = mats[i];
+            float tx = x + 30f + (i % MatCols) * (tile + 6f), ty = yy + (i / MatCols) * (tileH + 6f);
+            bool over = Hover(tx, ty, tile, tileH);
             if (over && Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > 0.5f) stationSel = i;
             bool sel = stationSel == i;
-            Box(x + 30f, ry, w - 60f, ch - 8f, sel ? new Color(1f, 1f, 1f, 0.1f) : new Color(1f, 1f, 1f, 0.035f));
-            if (sel) Box(x + 30f, ry, 4f, ch - 8f, lab.LabColor);
-            float isz = ch - 26f;
-            Icon(x + 44f, ry + 9f, isz, Items.Icon(r.icon), r.color);
-            float tx = x + 54f + isz;
-            Text(tx, ry + 4f, 400f, 32f, r.name, 22, ok ? Color.white : new Color(1f, 1f, 1f, 0.6f));
-            Text(tx, ry + 32f, 440f, ch - 40f, r.desc + (r.kind == ItemKind.Potion || r.kind == ItemKind.Throwable ? "  (" + Mathf.RoundToInt(r.time * lab.BrewSpeed) + "s" + (r.makes > 1 ? ", makes " + r.makes : "") + ")" : ""), 15, Dim, TextAnchor.UpperLeft, false, true);
-            // cost
-            float cx = x + w - 60f;
+            int free = p.Have(m) - mix[m];
+            Box(tx, ty, tile, tileH, sel ? new Color(1f, 1f, 1f, 0.13f) : new Color(1f, 1f, 1f, 0.045f));
+            if (sel) Box(tx, ty + tileH - 4f, tile, 4f, lab.LabColor);
+            Icon(tx + (tile - 44f) / 2f, ty + 6f, 44f, Items.MatIcon(m), Items.MatColors[m]);
+            Text(tx, ty + 50f, tile, 20f, Items.MatNames[m], 12, Items.MatColors[m], TextAnchor.MiddleCenter, false);
+            Text(tx, ty + 68f, tile, 22f, free.ToString(), 17, free > 0 ? Color.white : new Color(1f, 0.4f, 0.35f), TextAnchor.MiddleCenter);
+            if (Clicked(new Rect(tx, ty, tile, tileH))) { stationSel = i; AddToMix(p, m); Event.current.Use(); }
+            else if (RightClicked(new Rect(tx, ty, tile, tileH))) { stationSel = i; TakeFromMix(m); Event.current.Use(); }
+        }
+        if (mats.Count > 0) yy += Mathf.CeilToInt(mats.Count / (float)MatCols) * (tileH + 6f);
+        yy += 8f;
+
+        // ---- the mix ----
+        Text(x + 30f, yy, w, 28f, "THE MIX", 17, new Color(0.7f, 0.45f, 1f));
+        yy += 32f;
+        Box(x + 30f, yy, w - 60f, 96f, new Color(0f, 0f, 0f, 0.35f));
+        float mx = x + 46f;
+        bool any = false;
+        for (int m = 0; m < Items.MatCount; m++)
+        {
+            if (mix[m] <= 0) continue;
+            any = true;
+            if (mx > x + w - 400f) { Text(mx, yy, 60f, 96f, "...", 24, Dim); break; }
+            Box(mx, yy + 12f, 82f, 72f, new Color(1f, 1f, 1f, 0.06f));
+            Icon(mx + 6f, yy + 18f, 40f, Items.MatIcon(m), Items.MatColors[m]);
+            Text(mx + 46f, yy + 18f, 36f, 40f, "x" + mix[m], 18, Color.white);
+            Text(mx, yy + 58f, 82f, 22f, Items.MatNames[m], 11, Items.MatColors[m], TextAnchor.MiddleCenter, false);
+            if (Clicked(new Rect(mx, yy + 12f, 82f, 72f))) { TakeFromMix(m); Event.current.Use(); }
+            mx += 90f;
+        }
+        if (!any) Text(x + 46f, yy, 600f, 96f, "empty - add materials from above", 18, Dim, TextAnchor.MiddleLeft, false);
+        // buttons
+        float bx2 = x + w - 340f;
+        bool canMix = any;
+        bool overC = Hover(bx2, yy + 14f, 200f, 68f);
+        Box(bx2, yy + 14f, 200f, 68f, canMix ? (overC ? new Color(0.45f, 0.95f, 0.35f) : new Color(0.28f, 0.68f, 0.22f)) : new Color(1f, 1f, 1f, 0.08f));
+        Text(bx2, yy + 14f, 200f, 46f, "COMBINE", 26, canMix ? Color.white : Dim, TextAnchor.MiddleCenter);
+        Text(bx2, yy + 52f, 200f, 24f, pad ? "Y" : "E", 14, canMix ? Color.white : Dim, TextAnchor.MiddleCenter, false);
+        if (Clicked(new Rect(bx2, yy + 14f, 200f, 68f))) { Combine(p); Event.current.Use(); }
+        float cbx = x + w - 130f;
+        Box(cbx, yy + 14f, 84f, 68f, Hover(cbx, yy + 14f, 84f, 68f) ? new Color(1f, 1f, 1f, 0.16f) : new Color(1f, 1f, 1f, 0.07f));
+        Text(cbx, yy + 14f, 84f, 46f, "CLEAR", 17, Color.white, TextAnchor.MiddleCenter);
+        Text(cbx, yy + 52f, 84f, 24f, pad ? "LB" : "R", 14, Dim, TextAnchor.MiddleCenter, false);
+        if (Clicked(new Rect(cbx, yy + 14f, 84f, 68f))) { ClearMix(); Event.current.Use(); }
+        yy += 108f;
+
+        // ---- recipes you've discovered here ----
+        int total = Items.For(st.type).Count;
+        Text(x + 30f, yy, w, 28f, "DISCOVERED HERE   " + known.Count + " / " + total, 17, new Color(0.7f, 0.45f, 1f));
+        Text(x, yy, w - 30f, 28f, "click one to make it again", 14, Dim, TextAnchor.MiddleRight, false);
+        yy += 32f;
+        if (known.Count == 0)
+        {
+            Text(x + 30f, yy, w - 60f, 60f, "Nothing yet. Every recipe here is a secret - try different mixes and press COMBINE. Wrong mixes don't cost you anything.", 17, Dim, TextAnchor.UpperLeft, false, true);
+            return;
+        }
+        int rowsNeeded = Mathf.CeilToInt(known.Count / 2f);
+        float avail = y + h - 16f - yy;
+        float ch = Mathf.Clamp(avail / rowsNeeded, 34f, 70f);
+        float colW = (w - 60f - 10f) / 2f;
+        for (int i = 0; i < known.Count; i++)
+        {
+            Recipe r = known[i];
+            int cell = mats.Count + i;
+            float rx = x + 30f + (i % 2) * (colW + 10f), ry = yy + (i / 2) * ch;
+            if (ry + ch > y + h) break;
+            string problem = p.CraftProblem(r);
+            bool ok = problem == null;
+            bool over = Hover(rx, ry, colW, ch - 6f);
+            if (over && Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > 0.5f) stationSel = cell;
+            bool sel = stationSel == cell;
+            Box(rx, ry, colW, ch - 6f, sel ? new Color(1f, 1f, 1f, 0.1f) : new Color(1f, 1f, 1f, 0.035f));
+            if (sel) Box(rx, ry, 4f, ch - 6f, lab.LabColor);
+            float isz = ch - 16f;
+            Icon(rx + 10f, ry + 5f, isz, Items.Icon(r.icon), r.color);
+            Text(rx + 18f + isz, ry, 260f, (ch - 6f) * 0.6f, r.name, 18, ok ? Color.white : new Color(1f, 1f, 1f, 0.55f));
+            if (!ok) Text(rx + 18f + isz, ry + (ch - 6f) * 0.5f, 300f, (ch - 6f) * 0.5f, problem, 12, new Color(1f, 0.55f, 0.45f), TextAnchor.MiddleLeft, false);
+            float cx = rx + colW - 10f;
             for (int m = Items.MatCount - 1; m >= 0; m--)
             {
                 int need = r.cost[m];
                 if (need <= 0) continue;
                 bool enough = p.Have(m) >= need;
-                cx -= 66f;
-                Icon(cx, ry + 10f, 30f, Items.MatIcon(m), Items.MatColors[m]);
-                Text(cx + 30f, ry + 8f, 36f, 34f, need.ToString(), 20, enough ? Color.white : new Color(1f, 0.35f, 0.3f));
+                cx -= 56f;
+                Icon(cx, ry + (ch - 6f) / 2f - 13f, 26f, Items.MatIcon(m), Items.MatColors[m]);
+                Text(cx + 27f, ry, 30f, ch - 6f, need.ToString(), 17, enough ? Color.white : new Color(1f, 0.35f, 0.3f));
             }
-            // button / reason
-            if (ok)
+            if (Clicked(new Rect(rx, ry, colW, ch - 6f)))
             {
-                Box(x + w - 196f, ry + ch - 50f, 136f, 36f, sel ? new Color(0.35f, 0.85f, 0.3f) : new Color(0.22f, 0.55f, 0.2f));
-                Text(x + w - 196f, ry + ch - 50f, 136f, 36f, st.type == Station.Brew ? "BREW" : st.type == Station.Terminal ? "BUILD" : st.type == Station.Enchant ? "ENCHANT" : "CRAFT", 18, Color.white, TextAnchor.MiddleCenter);
-            }
-            else Text(x + 300f, ry + ch - 50f, w - 360f, 36f, problem, 15, new Color(1f, 0.55f, 0.45f), TextAnchor.MiddleRight, false);
-            if (Clicked(new Rect(x + 30f, ry, w - 60f, ch - 8f)))
-            {
-                stationSel = i;
+                stationSel = cell;
                 p.Craft(r);
                 Event.current.Use();
             }
@@ -872,7 +1028,7 @@ public class GameHUD : MonoBehaviour
         Box(0f, 0f, W, 1080f, new Color(0f, 0f, 0f, 0.6f));
         float x = 120f, y = 260f;
         Text(x, y - 120f, 800f, 100f, "PAUSED", 80, Color.white);
-        string[] rows = { "RESUME", "HOW TO PLAY & RECIPES", "CAMERA:  " + (Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON") + "   (V)", MLGame.I.phase < MLGame.Phase.Madness ? "SKIP TO NEXT PHASE (practice)" : "SKIP PHASE (already MADNESS)", "RESTART MATCH", "QUIT TO MENU" };
+        string[] rows = { "RESUME", "HOW TO PLAY & DISCOVERIES", "CAMERA:  " + (Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON") + "   (V)", MLGame.I.phase < MLGame.Phase.Madness ? "SKIP TO NEXT PHASE (practice)" : "SKIP PHASE (already MADNESS)", "RESTART MATCH", "QUIT TO MENU" };
         for (int i = 0; i < rows.Length; i++)
             if (MenuButton(i, ref pauseSel, x, y + i * 84f, 620f, 70f, rows[i], i == 0)) ChoosePause(i);
         // quick settings
@@ -905,22 +1061,25 @@ public class GameHUD : MonoBehaviour
         Box(0f, 0f, W, 1080f, new Color(0.01f, 0.02f, 0.03f, 0.95f));
         Text(80f, 30f, 1200f, 70f, "HOW TO PLAY", 50, new Color(0.45f, 1f, 0.35f));
         string how =
-            "1. COLLECT (60s): run around and press E on glowing material spots: Herb, Slime, Crystal, Metal, Chemical.\n" +
-            "2. Walk into YOUR lab - what you carry goes into storage. Use the stations (E) to brew, craft, enchant and upgrade.\n" +
+            "1. COLLECT (3 min): explore and press E on glowing material spots. Forests, caves, the old office building and the meteor crater all hide different materials.\n" +
+            "2. Walk into YOUR lab - what you carry goes into storage. At a station, put materials in the MIX and press COMBINE. If it's a secret recipe, you make it!\n" +
             "3. EXPERIMENT (30s): last chance before the shields drop.\n" +
-            "4. MADNESS: labs can be attacked. Defend yours, smash the others (plasma is great at that). The zone closes in.\n" +
+            "4. MADNESS: labs can be attacked. Defend yours, smash the others. The zone closes in.\n" +
             "If you're knocked out you come back at your lab - unless it's destroyed. Then you're out!";
-        Text(80f, 100f, W - 160f, 160f, how, 18, Color.white, TextAnchor.UpperLeft, false, true);
-        Text(80f, 255f, 1600f, 30f, "Move WASD · Sprint Shift · Jump Space · Fire / use: left click · Aim: right click · E: gather / use · 1-8 or wheel: pick item · Q: quick-heal", 16, Dim, TextAnchor.MiddleLeft, false);
-        // recipes in columns
+        Text(80f, 100f, W - 160f, 170f, how, 18, Color.white, TextAnchor.UpperLeft, false, true);
+        Text(80f, 270f, 1600f, 30f, "Move WASD · Sprint Shift · Jump Space · Fire / use: left click · Aim: right click · E: gather / use · 1-8 or wheel: pick item · Q: quick-heal", 16, Dim, TextAnchor.MiddleLeft, false);
+        // what you've discovered so far
         Station[] order = { Station.Brew, Station.Workbench, Station.Enchant, Station.Terminal };
         float colW = (W - 160f) / 4f;
         for (int c = 0; c < order.Length; c++)
         {
-            float x = 80f + c * colW, y = 300f;
-            Text(x, y, colW, 34f, LabStation.Names[(int)order[c]].ToUpperInvariant(), 22, new Color(0.7f, 0.45f, 1f));
+            float x = 80f, y = 320f;
+            x += c * colW;
+            List<Recipe> all = Items.For(order[c]);
+            List<Recipe> found = Discoveries.Known(order[c]);
+            Text(x, y, colW, 34f, LabStation.Names[(int)order[c]].ToUpperInvariant() + "   " + found.Count + "/" + all.Count, 22, new Color(0.7f, 0.45f, 1f));
             y += 40f;
-            foreach (Recipe r in Items.For(order[c]))
+            foreach (Recipe r in found)
             {
                 Icon(x, y, 40f, Items.Icon(r.icon), r.color);
                 Text(x + 48f, y - 2f, colW - 60f, 24f, r.name, 17, Color.white);
@@ -934,6 +1093,8 @@ public class GameHUD : MonoBehaviour
                 }
                 y += 56f;
             }
+            int secret = all.Count - found.Count;
+            if (secret > 0) Text(x, y, colW - 20f, 30f, "+ " + secret + " secret recipe" + (secret == 1 ? "" : "s") + " (???)", 16, Dim, TextAnchor.MiddleLeft, false);
         }
         Text(80f, 1030f, 1200f, 30f, "Esc / Tab to go back", 17, Dim, TextAnchor.MiddleLeft, false);
     }

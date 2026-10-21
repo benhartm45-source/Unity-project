@@ -108,7 +108,7 @@ GameObject:
   - component: {fileID: 3025183693658242242}
   - component: {fileID: 6870097496136545646}
   - component: {fileID: 607486328861933563}
-  - component: {fileID: 1288391631297634699}
+  - component: {fileID: 5984470415575626734}
   m_Layer: 0
   m_Name: Toxic_Pool
   m_TagString: Untagged
@@ -193,7 +193,7 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &1288391631297634699
+--- !u!114 &5984470415575626734
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
