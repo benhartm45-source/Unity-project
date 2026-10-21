@@ -106,6 +106,28 @@ public static class Combat
         return c.bounds.ClosestPoint(p);
     }
 
+    // Small pop (enchant explosions on every hit): damage nearby, no screen shake.
+    public static void MiniBlast(Vector3 pos, float radius, float damage, int team, Element ench, float structureMul, bool fromPlayer, Color color)
+    {
+        Fx.Burst(pos, color, 10, 5f, 0.1f, 0.4f);
+        Fx.Flash(pos, color, radius * 3f, 3f, 0.12f);
+        Sfx.At("pop", pos, 0.45f, Random.Range(0.6f, 0.8f), 40f);
+        var done = new HashSet<IDamageable>();
+        foreach (Collider c in Physics.OverlapSphere(pos, radius, ~0, QueryTriggerInteraction.Ignore))
+        {
+            IDamageable d = Find(c);
+            if (d == null || done.Contains(d) || !d.Alive || !Teams.Hostile(team, d.Team)) continue;
+            done.Add(d);
+            Vector3 dir = d.Center - pos;
+            dir = dir.sqrMagnitude > 0.01f ? dir.normalized : Vector3.up;
+            d.TakeHit(new Hit { damage = damage, point = Closest(c, pos), dir = dir, force = 1.5f, element = ench, team = team, structureMul = structureMul, fromPlayer = fromPlayer, dot = true });
+        }
+        // the player too (they're on a layer OverlapSphere skips)
+        Player p = Player.Local;
+        if (p != null && p.Alive && Teams.Hostile(team, p.Team) && Vector3.Distance(p.Center, pos) < radius + 0.4f)
+            p.TakeHit(new Hit { damage = damage, point = pos, dir = (p.Center - pos).normalized, force = 1.5f, element = ench, team = team, structureMul = 1f, fromPlayer = fromPlayer });
+    }
+
     // Big boom: damages everything nearby, pushes things away.
     public static void Blast(Vector3 pos, float radius, float damage, float force, int team, Element ench, float structureMul, bool fromPlayer, Color color)
     {
@@ -330,7 +352,13 @@ public class Projectile : MonoBehaviour
                 else
                 {
                     if (target != null && Teams.Hostile(team, target.Team))
-                        target.TakeHit(new Hit { damage = damage, point = point, dir = vel.normalized, force = gun.force, element = element, team = team, structureMul = gun.structure, fromPlayer = fromPlayer });
+                    {
+                        float dmg = damage;
+                        if (gun.crit > 0f && Random.value < gun.crit) { dmg *= 2f; Fx.Burst(point, new Color(1f, 0.95f, 0.4f), 8, 4f, 0.08f, 0.3f); }
+                        target.TakeHit(new Hit { damage = dmg, point = point, dir = vel.normalized, force = gun.force, element = element, team = team, structureMul = gun.structure, fromPlayer = fromPlayer });
+                        if (fromPlayer && gun.lifesteal > 0f && !(target is Laboratory) && Player.Local != null) Player.Local.HealFrom(dmg * gun.lifesteal);
+                    }
+                    if (gun.hitBlast > 0f) Combat.MiniBlast(point + normal * 0.2f, gun.hitBlast, damage * 0.5f, team, element, gun.structure, fromPlayer, color);
                     Fx.Burst(point, color, 8, 3f, gun.size * 0.5f, 0.35f);
                     if (gun.element == Element.Slime || gun.puddle) Sfx.At("slime_splat", point, 0.4f, 1.3f);
                     if (gun.puddle) SlimePuddle.Spawn(point, team);

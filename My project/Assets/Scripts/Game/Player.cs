@@ -173,6 +173,7 @@ public partial class Player : MonoBehaviour, IDamageable
         float speed = Sprinting ? 8.6f : Aiming ? 3.4f : 5.6f;
         if (Model.Busy) speed = 2.2f;
         if (speedLeft > 0f) speed *= 1.45f;
+        speed *= SpeedMul;                      // armour and potions
         speed *= status.SpeedMul * SlimeFactor();
         if (Working) speed = 0f;
 
@@ -188,7 +189,7 @@ public partial class Player : MonoBehaviour, IDamageable
         bool jumpPressed = control && ((K != null && K.spaceKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame));
         if (jumpPressed) jumpBuffer = 0.15f;
         jumpBuffer -= dt;
-        float jumpV = leapLeft > 0f ? 13f : 7f;
+        float jumpV = (leapLeft > 0f ? 13f : 7f) * JumpMul;
         if (jumpBuffer > 0f && Time.time - lastGrounded < 0.15f && status.freeze <= 0f)
         {
             velocity.y = jumpV;
@@ -196,7 +197,7 @@ public partial class Player : MonoBehaviour, IDamageable
             lastGrounded = -10f;
             Sfx.Play("jump", 0.5f, Random.Range(0.95f, 1.08f));
         }
-        else if (jumpBuffer > 0f && !grounded && bounceBoots && !doubleJumpUsed && status.freeze <= 0f)
+        else if (jumpBuffer > 0f && !grounded && DoubleJump && !doubleJumpUsed && status.freeze <= 0f)
         {
             velocity.y = jumpV * 0.95f;
             doubleJumpUsed = true;
@@ -209,7 +210,7 @@ public partial class Player : MonoBehaviour, IDamageable
 
     void Gravity(float dt)
     {
-        velocity.y += -22f * dt;
+        velocity.y += -22f * GravityMul * dt;
         if (velocity.y < -45f) velocity.y = -45f;
         push = Vector3.MoveTowards(push, Vector3.zero, (grounded ? 22f : 6f) * dt);
         Vector3 motion = (velocity + push) * dt;
@@ -235,7 +236,7 @@ public partial class Player : MonoBehaviour, IDamageable
             Fx.Ring(transform.position + Vector3.up * 0.05f, new Color(0.7f, 0.65f, 0.55f, 0.5f), 10, 3f, 0.25f);
         }
         // big falls hurt (unless you have Bounce Boots or a Leap Potion)
-        if (vy < -17f && !bounceBoots && leapLeft <= 0f && !dead)
+        if (vy < -17f && !bounceBoots && leapLeft <= 0f && !NoFall && !dead)
             TakeHit(new Hit { damage = (-vy - 17f) * 5f, team = Teams.Neutral, point = transform.position, dir = Vector3.down });
     }
 
@@ -247,6 +248,7 @@ public partial class Player : MonoBehaviour, IDamageable
 
     float SlimeFactor()
     {
+        if (Immune(Element.Slime)) return 1f;
         foreach (SlimePuddle s in SlimePuddle.All)
             if (s != null && s.Catches(transform.position, Team)) return s.permanent ? 0.3f : 0.45f;
         return 1f;
@@ -265,6 +267,7 @@ public partial class Player : MonoBehaviour, IDamageable
             healLeft -= k;
             health = Mathf.Min(MaxHealth, health + 30f * k);
         }
+        GearUpdate(dt);
         float dot = status.Tick(dt);
         if (dot > 0f) TakeHit(new Hit { damage = dot, team = status.lastTeam, element = status.burn > 0f ? Element.Fire : Element.Poison, dot = true, point = Center });
         status.Show(Center);
@@ -277,7 +280,7 @@ public partial class Player : MonoBehaviour, IDamageable
         if (MLGame.I != null && MLGame.I.OutsideZone(transform.position))
         {
             zoneTick -= dt;
-            if (zoneTick <= 0f) { zoneTick = 0.5f; TakeHit(new Hit { damage = MLGame.I.ZoneDamage * 0.5f, team = Teams.Neutral, dot = true, point = Center }); }
+            if (zoneTick <= 0f) { zoneTick = 0.5f; TakeHit(new Hit { damage = MLGame.I.ZoneDamage * 0.5f * ZoneMul, team = Teams.Neutral, dot = true, point = Center }); }
         }
     }
     float zoneTick;
@@ -291,16 +294,17 @@ public partial class Player : MonoBehaviour, IDamageable
         if (dead || !MLGame.Playing) return;
         float dmg = h.damage;
         if (ironLeft > 0f) dmg *= 0.5f;
+        dmg *= DamageTakenMul;                  // armour and potions
         if (armor > 0f && !h.dot)
         {
             float soak = Mathf.Min(armor, dmg * 0.7f);
             armor -= soak;
             dmg -= soak;
-            if (armor <= 0f) { armorTier = 0; Model.SetArmor(0, bounceBoots); Sfx.Play("armor_break", 0.8f); GameHUD.Toast("Your armour broke!", new Color(1f, 0.5f, 0.3f)); }
+            if (armor <= 0f) { ArmorBroke(); Sfx.Play("armor_break", 0.8f); GameHUD.Toast("Your armour broke!", new Color(1f, 0.5f, 0.3f)); }
         }
         health -= dmg;
-        if (h.element != Element.None && !h.dot) status.Apply(h.element, h.team);
-        if (h.force > 0f) push += (h.dir + Vector3.up * 0.4f).normalized * h.force * (ironLeft > 0f ? 0.5f : 1f);
+        if (h.element != Element.None && !h.dot && !Immune(h.element)) status.Apply(h.element, h.team);
+        if (h.force > 0f) push += (h.dir + Vector3.up * 0.4f).normalized * h.force * (ironLeft > 0f ? 0.5f : 1f) * KnockMul;
         if (h.force > 4f) velocity.y = Mathf.Max(velocity.y, h.force * 0.5f);
         lastHurt = Time.time;
         regenDelay = 6f;
@@ -321,6 +325,7 @@ public partial class Player : MonoBehaviour, IDamageable
         health = 0f;
         status.Clear();
         speedLeft = leapLeft = ironLeft = healLeft = 0f;
+        ClearBuffs();
         Model.dead = true;
         Sfx.Play("death", 0.9f);
         CancelUse();

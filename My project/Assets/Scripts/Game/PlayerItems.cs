@@ -59,6 +59,8 @@ public partial class Player
         status.Clear();
         dead = false;
         RespawnAt = -1f;
+        suit = null;
+        ClearBuffs();
         if (Model != null) { Model.dead = false; Model.SetArmor(0, false); }
         shownSlot = -1;
         RefreshHeld();
@@ -69,13 +71,16 @@ public partial class Player
     {
         HeldItem h = Held;
         Element e = h != null ? h.enchant : Element.None;
-        if (shownSlot == selected && shownItem == h && shownEnchant == e) return;
+        EnchantDef ed = h != null ? h.enchantDef : null;
+        if (shownSlot == selected && shownItem == h && shownEnchant == e && shownEnchDef == ed) return;
         shownSlot = selected;
         shownItem = h;
         shownEnchant = e;
+        shownEnchDef = ed;
         Model.SetHeld(h);
     }
     HeldItem shownItem;
+    EnchantDef shownEnchDef;
 
     // ================================================================
     // Hotbar and using things
@@ -88,7 +93,7 @@ public partial class Player
         {
             if (it == null) continue;
             it.cooldown = Mathf.Max(0f, it.cooldown - dt);
-            float cool = it.overheated ? 45f : 32f;
+            float cool = (it.overheated ? 45f : 32f) * CoolMul;
             if (!(Firing && it == Held)) it.heat = Mathf.Max(0f, it.heat - cool * dt);
             if (it.overheated && it.heat <= 25f) it.overheated = false;
         }
@@ -253,8 +258,9 @@ public partial class Player
     float burstAt, beamSfxCd;
     int beamTick;
 
-    void FireGun(HeldItem h, GunDef g, Vector3 from)
+    void FireGun(HeldItem h, GunDef g0, Vector3 from)
     {
+        GunDef g = Guns.Effective(g0, h.enchantDef, this);     // enchant + potions change the numbers
         h.cooldown = g.cooldown;
         AddHeat(h, g.heat);
         if (g.burst > 1) { burstItem = h; burstLeft = g.burst - 1; burstAt = Time.time + g.burstGap; }
@@ -266,8 +272,9 @@ public partial class Player
     {
         if (burstLeft <= 0 || Time.time < burstAt) return;
         if (burstItem != Held || dead || Model.Muzzle == null) { burstLeft = 0; return; }
-        GunDef g = Guns.Get(burstItem.id);
-        if (g == null) { burstLeft = 0; return; }
+        GunDef g0 = Guns.Get(burstItem.id);
+        if (g0 == null) { burstLeft = 0; return; }
+        GunDef g = Guns.Effective(g0, burstItem.enchantDef, this);
         burstLeft--;
         burstAt = Time.time + g.burstGap;
         GunShot(burstItem, g, Model.Muzzle.position);
@@ -275,8 +282,8 @@ public partial class Player
 
     void GunShot(HeldItem h, GunDef g, Vector3 from)
     {
-        Element el = h.enchant != Element.None ? h.enchant : g.element;
-        Color c = h.enchant != Element.None ? Items.ElementColor(h.enchant) : g.color;
+        Element el = g.element;
+        Color c = g.color;
         float range = g.mode == GunMode.Beam ? g.range : Mathf.Max(g.range, 30f);
         Vector3 aim = GameCam.I.AimPoint(g.mode == GunMode.Projectile ? 250f : range);
         Vector3 dir = (aim - from).normalized;
@@ -299,7 +306,11 @@ public partial class Player
         Model.Kick(g.kick);
         GameCam.Kick(g.kick * 1.4f);
         if (g.force > 3f && g.mode != GunMode.Beam) push -= dir * g.kick;
-        if (g.mode == GunMode.Beam)
+        if (g.mode == GunMode.Beam && g.id == ItemId.FreezeRay)
+        {
+            if (beamLoop == null) beamLoop = Sfx.Loop("freeze_loop", transform, 0.5f, 25f);
+        }
+        else if (g.mode == GunMode.Beam)
         {
             beamSfxCd -= g.cooldown;
             if (beamSfxCd <= 0f) { beamSfxCd = 0.3f; Sfx.Play(g.sound, g.volume, g.pitch * Random.Range(0.92f, 1.08f)); }
@@ -314,6 +325,19 @@ public partial class Player
 
     Hit MakeHit(GunDef g, float damage, Vector3 point, Vector3 dir, Element el, bool dot = false)
         => new Hit { damage = damage, point = point, dir = dir, force = g.force, element = el, team = Team, structureMul = g.structure, fromPlayer = true, dot = dot };
+
+    // One hit on something: crits, life steal and little enchant explosions happen here.
+    void Strike(IDamageable d, GunDef g, float damage, Vector3 point, Vector3 dir, Element el, bool dot = false)
+    {
+        if (g.crit > 0f && !dot && Random.value < g.crit)
+        {
+            damage *= 2f;
+            Fx.Burst(point, new Color(1f, 0.95f, 0.4f), 8, 4f, 0.08f, 0.3f);
+        }
+        d.TakeHit(MakeHit(g, damage, point, dir, el, dot));
+        if (g.lifesteal > 0f && !(d is Laboratory)) HealFrom(damage * g.lifesteal);
+        if (g.hitBlast > 0f && !dot) Combat.MiniBlast(point - dir * 0.2f, g.hitBlast, damage * 0.5f, Team, el, g.structure, true, g.color);
+    }
 
     // Instant bullets / lasers. Pierce = goes through things in a line. Chain = lightning that jumps on.
     void GunRay(Vector3 from, Vector3 dir, GunDef g, Element el, Color c)
@@ -344,7 +368,7 @@ public partial class Player
                 if (!Teams.Hostile(Team, d.Team)) { to = hit.point; break; }     // your own lab's wall stops it
                 if (d.Alive && Teams.Hostile(Team, d.Team))
                 {
-                    d.TakeHit(MakeHit(g, g.damage * (pierced == 0 ? 1f : 0.75f), hit.point, dir, el));
+                    Strike(d, g, g.damage * (pierced == 0 ? 1f : 0.75f), hit.point, dir, el);
                     Fx.Burst(hit.point, c, 8, 4f, 0.07f, 0.3f);
                     pierced++;
                 }
@@ -357,10 +381,11 @@ public partial class Player
             IDamageable d = Combat.Find(hit.collider);
             if (d != null && d.Alive && Teams.Hostile(Team, d.Team))
             {
-                d.TakeHit(MakeHit(g, g.damage, hit.point, dir, el));
+                Strike(d, g, g.damage, hit.point, dir, el);
                 first = d;
                 firstPoint = hit.point;
             }
+            else if (g.hitBlast > 0f) Combat.MiniBlast(hit.point + hit.normal * 0.2f, g.hitBlast, g.damage * 0.5f, Team, el, g.structure, true, g.color);
             Fx.Burst(hit.point + hit.normal * 0.05f, c, g.pellets > 1 ? 3 : 7, 3.5f, 0.06f, 0.3f);
         }
         float width = Mathf.Clamp(g.damage / 300f, 0.025f, 0.12f) + (g.pierce ? 0.08f : 0f);
@@ -387,7 +412,7 @@ public partial class Player
                 if (next == null) break;
                 hitSet.Add(next);
                 dmg *= 0.7f;
-                next.TakeHit(MakeHit(g, dmg, next.Center, (next.Center - at).normalized, el));
+                Strike(next, g, dmg, next.Center, (next.Center - at).normalized, el);
                 Fx.Beam(at, next.Center, c, 0.06f, 0.15f, true);
                 Fx.Burst(next.Center, c, 6, 3f, 0.06f, 0.3f);
                 at = next.Center;
@@ -410,7 +435,7 @@ public partial class Player
             to = hit.point;
             IDamageable d = Combat.Find(hit.collider);
             // every 3rd tick counts as a proper hit (puts the element on, makes them flinch); the rest just hurt
-            if (d != null && d.Alive && Teams.Hostile(Team, d.Team)) d.TakeHit(MakeHit(g, g.damage, hit.point, dir, el, beamTick % 3 != 0));
+            if (d != null && d.Alive && Teams.Hostile(Team, d.Team)) Strike(d, g, g.damage, hit.point, dir, el, beamTick % 3 != 0);
         }
         // the spray itself
         for (int k = 0; k < 3; k++)
@@ -514,6 +539,10 @@ public partial class Player
             case ItemId.SpeedPotion: speedLeft = 15f; break;
             case ItemId.LeapPotion: leapLeft = 15f; break;
             case ItemId.IronSkinPotion: ironLeft = 15f; break;
+            default:
+                PotionDef pd = Gear.Potion(h.id);
+                if (pd != null) DrinkPotion(pd, h.R);
+                break;
         }
         UseOne(h);
     }
@@ -533,7 +562,14 @@ public partial class Player
         Vector3 from = Model.HandPosition;
         Vector3 aim = GameCam.I.AimPoint(60f);
         Vector3 dir = (aim - from).normalized;
-        Projectile.Fire(Projectile.Kind.Toxic, from, dir * 18f + Vector3.up * 4f, Team, Element.Poison, true);
+        PotionDef pd = Gear.Potion(h.id);
+        if (pd != null && pd.bomb != null)
+        {
+            GunDef b = pd.bomb.Clone();
+            b.damage *= DamageDealtMul;
+            Projectile.FireGun(b, from, dir * b.speed + Vector3.up * 4f, Team, b.element, b.color, true);
+        }
+        else Projectile.Fire(Projectile.Kind.Toxic, from, dir * 18f + Vector3.up * 4f, Team, Element.Poison, true);
         Sfx.Play("throw", 0.6f);
         UseOne(h);
     }
@@ -685,11 +721,11 @@ public partial class Player
                 break;
             case ItemKind.Armor:
                 if (r.id == ItemId.BounceBoots && bounceBoots) return "You're already wearing them.";
-                if (r.id == ItemId.ScrapArmor && armorTier == 2 && armor > 50f) return "You've got better armour on.";
+                if (suit != null && suit.id == r.id && armor >= suit.armor - 1f) return "You're already wearing it.";
                 break;
             case ItemKind.Enchant:
                 if (Held == null || Held.R.kind != ItemKind.Weapon) return "Hold a weapon to enchant it.";
-                if (Held.enchant == Items.EnchantElement(r.id)) return "Already enchanted with that.";
+                if (Held.enchantDef != null && Held.enchantDef.id == r.id) return "Already enchanted with that.";
                 break;
             case ItemKind.Upgrade:
                 string up = MyLab.UpgradeProblem(r.id);
@@ -739,16 +775,19 @@ public partial class Player
                 GiveItem(r.id, 1);
                 break;
             case ItemKind.Armor:
-                if (r.id == ItemId.BounceBoots) bounceBoots = true;
+                if (r.id == ItemId.BounceBoots) { bounceBoots = true; Model.SetArmor(armorTier, bounceBoots, suit); }
                 else
                 {
-                    armorTier = r.id == ItemId.CrystalArmor ? 2 : 1;
-                    armor = armorTier == 2 ? 100f : 50f;
+                    ArmorDef a = Gear.Armor(r.id);
+                    if (a != null) Equip(a);
                 }
-                Model.SetArmor(armorTier, bounceBoots);
                 break;
             case ItemKind.Enchant:
-                if (Held != null && Held.R.kind == ItemKind.Weapon) Held.enchant = Items.EnchantElement(r.id);
+                if (Held != null && Held.R.kind == ItemKind.Weapon)
+                {
+                    Held.enchantDef = Gear.Enchant(r.id);
+                    Held.enchant = Held.enchantDef != null ? Held.enchantDef.element : Items.EnchantElement(r.id);
+                }
                 Fx.Burst(Model.Muzzle != null ? Model.Muzzle.position : Center, r.color, 20, 3f, 0.08f, 0.8f, 1f);
                 break;
             case ItemKind.Upgrade:

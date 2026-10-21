@@ -109,8 +109,9 @@ public class RaidDrone : MonoBehaviour, IDamageable
         Player p = Player.Local;
         Vector3 focus;
         IDamageable shootAt = null;
-        bool chasePlayer = p != null && p.Alive && Vector3.Distance(p.transform.position, transform.position) < 18f;
-        if (target == null || target.Destroyed) chasePlayer = p != null && p.Alive;
+        bool canSee = p != null && p.Alive && !p.Hidden;          // (a Ghost Potion hides you)
+        bool chasePlayer = canSee && Vector3.Distance(p.transform.position, transform.position) < 18f;
+        if (target == null || target.Destroyed) chasePlayer = canSee;
         if (chasePlayer) { focus = p.transform.position; shootAt = p; }
         else if (target != null) { focus = target.transform.position; shootAt = target; }
         else focus = MLGame.ArenaCenter;

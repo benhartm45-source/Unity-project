@@ -569,7 +569,7 @@ public class Laboratory : MonoBehaviour, IDamageable
         }
         // rival labs defend themselves against you if you've been attacking them
         Player p = Player.Local;
-        if (target == null && p != null && p.Alive && p.labIndex != Index && Time.time - lastAttackedByPlayer < 20f)
+        if (target == null && p != null && p.Alive && !p.Hidden && p.labIndex != Index && Time.time - lastAttackedByPlayer < 20f)
         {
             float dist = Vector3.Distance(from, p.Center);
             if (dist < 30f && Clear(from, p.Center)) { target = p; aimAt = p.Center; }

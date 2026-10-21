@@ -49,6 +49,9 @@ public class GunDef
     public string sound = "zap";
     public float pitch = 1f, volume = 0.55f, kick = 0.4f;
     public bool lightning;                      // zig-zag tracer
+    public float hitBlast, lifesteal, crit;     // usually from enchants
+
+    public GunDef Clone() => (GunDef)MemberwiseClone();
 }
 
 public static class Guns
@@ -57,6 +60,21 @@ public static class Guns
 
     public static readonly GunDef[] All =
     {
+        // ---- the 4 originals ----
+        new GunDef { id = ItemId.Zapper, mode = GunMode.Hitscan, look = GunLook.Blaster,
+            damage = 11f, cooldown = 0.19f, heat = 8f, range = 80f, lightning = true,
+            color = new Color(0.4f, 0.7f, 1f), sound = "zap", pitch = 1f, kick = 0.35f },
+        new GunDef { id = ItemId.FreezeRay, mode = GunMode.Beam, look = GunLook.Sprayer,
+            damage = 2.4f, cooldown = 0.1f, heat = 3.6f, range = 22f, element = Element.Ice, structure = 0.8f,
+            color = new Color(0.55f, 0.95f, 1f), sound = "freeze_loop", volume = 0.35f, kick = 0.08f },
+        new GunDef { id = ItemId.PlasmaLauncher, mode = GunMode.Projectile, look = GunLook.Launcher, auto = true,
+            damage = 42f, cooldown = 0.85f, heat = 34f, speed = 34f, gravity = -2f, blast = 3.6f, size = 0.38f, structure = 2.5f, force = 11f,
+            color = new Color(1f, 0.4f, 0.95f), sound = "plasma_fire", volume = 0.7f, kick = 1.4f },
+        new GunDef { id = ItemId.SlimeCannon, mode = GunMode.Projectile, look = GunLook.Launcher,
+            damage = 16f, cooldown = 0.55f, heat = 18f, speed = 26f, gravity = -14f, size = 0.38f, element = Element.Slime, puddle = true, force = 2f,
+            color = new Color(0.35f, 1f, 0.4f), sound = "slime_fire", volume = 0.6f, kick = 0.8f },
+
+        // ---- the first 20 ----
         new GunDef { id = ItemId.BerryBlaster, mode = GunMode.Projectile, look = GunLook.SMG,
             damage = 8f, cooldown = 0.13f, heat = 7f, speed = 55f, gravity = -3f, size = 0.16f,
             color = new Color(0.95f, 0.2f, 0.4f), body = new Color(0.5f, 0.12f, 0.25f), trim = new Color(0.4f, 0.8f, 0.3f), sound = "pop", pitch = 1.3f, kick = 0.25f },
@@ -136,12 +154,108 @@ public static class Guns
         new GunDef { id = ItemId.StarShooter, mode = GunMode.Projectile, look = GunLook.Blaster,
             damage = 13f, pellets = 3, spread = 5f, cooldown = 0.5f, heat = 15f, speed = 45f, size = 0.18f, star = true,
             color = new Color(0.85f, 0.7f, 1f), body = new Color(0.25f, 0.2f, 0.4f), trim = new Color(1f, 0.9f, 0.5f), sound = "laser", pitch = 2f, volume = 0.5f, kick = 0.4f },
+
+        // ---- 30 more ----
+        new GunDef { id = ItemId.HerbDartGun, mode = GunMode.Projectile, look = GunLook.Pistol, damage = 9, cooldown = 0.2f, heat = 7, speed = 70, size = 0.1f, element = Element.Poison, sound = "pop", pitch = 1.6f, kick = 0.2f, color = new Color(0.44f, 1f, 0.33f), body = new Color(0.18f, 0.4275f, 0.135f), trim = new Color(0.4f, 0.95f, 0.3f) },
+        new GunDef { id = ItemId.SlimeShotgun, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 6, pellets = 7, spread = 7, cooldown = 0.85f, heat = 22, range = 20, element = Element.Slime, auto = false, sound = "slime_fire", pitch = 0.8f, volume = 0.7f, kick = 1f, force = 2, color = new Color(0.33f, 1f, 0.825f), body = new Color(0.135f, 0.4275f, 0.3375f), trim = new Color(0.3f, 0.95f, 0.75f) },
+        new GunDef { id = ItemId.CrystalRepeater, mode = GunMode.Hitscan, look = GunLook.Rifle, damage = 9, cooldown = 0.13f, heat = 6, range = 100, element = Element.Ice, sound = "laser", pitch = 1.4f, volume = 0.4f, kick = 0.25f, color = new Color(0.44f, 0.935f, 1f), body = new Color(0.18f, 0.3825f, 0.45f), trim = new Color(0.4f, 0.85f, 1f) },
+        new GunDef { id = ItemId.MetalMinigun, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 5, cooldown = 0.05f, heat = 3.4f, range = 80, spread = 3, sound = "turret", pitch = 1.4f, volume = 0.4f, kick = 0.12f, color = new Color(0.825f, 0.858f, 0.902f), body = new Color(0.3375f, 0.351f, 0.369f), trim = new Color(0.75f, 0.78f, 0.82f) },
+        new GunDef { id = ItemId.AcidSprayer, mode = GunMode.Beam, look = GunLook.Sprayer, damage = 2.4f, cooldown = 0.08f, heat = 3.2f, range = 9, element = Element.Poison, structure = 1.6f, sound = "toxic_hiss", pitch = 1.2f, volume = 0.35f, kick = 0.05f, color = new Color(0.88f, 0.44f, 1f), body = new Color(0.36f, 0.18f, 0.45f), trim = new Color(0.8f, 0.4f, 1f) },
+        new GunDef { id = ItemId.BerryBomber, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 24, cooldown = 0.9f, heat = 24, speed = 24, gravity = -11, blast = 2.8f, size = 0.26f, structure = 1.8f, force = 7, auto = false, sound = "pop", pitch = 0.6f, volume = 0.8f, kick = 1.1f, color = new Color(1f, 0.275f, 0.495f), body = new Color(0.4275f, 0.1125f, 0.2025f), trim = new Color(0.95f, 0.25f, 0.45f) },
+        new GunDef { id = ItemId.WoodCrossbow, mode = GunMode.Projectile, look = GunLook.Musket, damage = 38, cooldown = 1f, heat = 20, speed = 70, gravity = -3, size = 0.14f, force = 3, auto = false, sound = "throw", pitch = 1.3f, volume = 0.8f, kick = 0.7f, color = new Color(0.792f, 0.55f, 0.33f), body = new Color(0.324f, 0.225f, 0.135f), trim = new Color(0.72f, 0.5f, 0.3f) },
+        new GunDef { id = ItemId.SapCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 20, cooldown = 0.8f, heat = 22, speed = 24, gravity = -12, size = 0.3f, element = Element.Slime, puddle = true, structure = 1.2f, force = 3, sound = "slime_fire", pitch = 0.6f, volume = 0.8f, kick = 1f, color = new Color(1f, 0.77f, 0.22f), body = new Color(0.45f, 0.315f, 0.09f), trim = new Color(1f, 0.7f, 0.2f) },
+        new GunDef { id = ItemId.MushroomMortar, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 30, cooldown = 1.4f, heat = 34, speed = 20, gravity = -16, blast = 3.4f, size = 0.3f, element = Element.Poison, structure = 2, force = 6, auto = false, sound = "plasma_fire", pitch = 0.5f, volume = 0.8f, kick = 1.4f, color = new Color(1f, 0.495f, 0.44f), body = new Color(0.45f, 0.2025f, 0.18f), trim = new Color(1f, 0.45f, 0.4f) },
+        new GunDef { id = ItemId.MossSniper, mode = GunMode.Hitscan, look = GunLook.Sniper, damage = 55, cooldown = 1.5f, heat = 40, range = 220, element = Element.Poison, force = 3, auto = false, sound = "turret", pitch = 0.55f, volume = 0.85f, kick = 1.2f, color = new Color(0.495f, 0.77f, 0.33f), body = new Color(0.2025f, 0.315f, 0.135f), trim = new Color(0.45f, 0.7f, 0.3f) },
+        new GunDef { id = ItemId.PetalStorm, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 7, pellets = 5, spread = 8, cooldown = 0.45f, heat = 14, speed = 40, size = 0.14f, star = true, sound = "pop", pitch = 1.8f, volume = 0.5f, kick = 0.3f, color = new Color(1f, 0.682f, 0.935f), body = new Color(0.45f, 0.279f, 0.3825f), trim = new Color(1f, 0.62f, 0.85f) },
+        new GunDef { id = ItemId.CoalFlamethrower, mode = GunMode.Beam, look = GunLook.Sprayer, damage = 3, cooldown = 0.08f, heat = 3.6f, range = 11, element = Element.Fire, structure = 1.8f, sound = "toxic_hiss", pitch = 0.6f, volume = 0.4f, kick = 0.05f, color = new Color(0.33f, 0.33f, 0.363f), body = new Color(0.135f, 0.135f, 0.1485f), trim = new Color(0.3f, 0.3f, 0.33f) },
+        new GunDef { id = ItemId.IronShotgun, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 9, pellets = 7, spread = 6, cooldown = 0.9f, heat = 24, range = 22, force = 3, auto = false, sound = "explode", pitch = 1.7f, volume = 0.45f, kick = 1.3f, color = new Color(0.935f, 0.572f, 0.44f), body = new Color(0.3825f, 0.234f, 0.18f), trim = new Color(0.85f, 0.52f, 0.4f) },
+        new GunDef { id = ItemId.GoldBlaster, mode = GunMode.Hitscan, look = GunLook.Blaster, damage = 22, burst = 2, burstGap = 0.1f, cooldown = 0.6f, heat = 16, range = 90, auto = false, sound = "laser", pitch = 0.9f, volume = 0.6f, kick = 0.6f, color = new Color(1f, 0.902f, 0.275f), body = new Color(1f, 0.82f, 0.25f), trim = new Color(1f, 0.82f, 0.25f) },
+        new GunDef { id = ItemId.SulfurGrenadeLauncher, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 28, cooldown = 0.9f, heat = 26, speed = 26, gravity = -12, blast = 3f, size = 0.24f, element = Element.Fire, structure = 2.2f, force = 8, auto = false, sound = "plasma_fire", pitch = 0.8f, kick = 1.1f, color = new Color(1f, 1f, 0.33f), body = new Color(0.4275f, 0.4275f, 0.135f), trim = new Color(0.95f, 0.95f, 0.3f) },
+        new GunDef { id = ItemId.GlowstoneBeam, mode = GunMode.Beam, look = GunLook.Coil, damage = 3.2f, cooldown = 0.08f, heat = 3f, range = 16, structure = 1.2f, sound = "laser", pitch = 0.6f, volume = 0.3f, kick = 0.03f, color = new Color(1f, 1f, 0.715f), body = new Color(0.45f, 0.4275f, 0.2925f), trim = new Color(1f, 0.95f, 0.65f) },
+        new GunDef { id = ItemId.UraniumCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 45, cooldown = 1.6f, heat = 45, speed = 28, gravity = -4, blast = 4f, size = 0.34f, element = Element.Poison, structure = 2.5f, force = 10, auto = false, sound = "plasma_fire", pitch = 0.45f, volume = 0.85f, kick = 1.7f, color = new Color(0.605f, 1f, 0.22f), body = new Color(0.2475f, 0.45f, 0.09f), trim = new Color(0.55f, 1f, 0.2f) },
+        new GunDef { id = ItemId.ObsidianRifle, mode = GunMode.Hitscan, look = GunLook.Rifle, damage = 14, cooldown = 0.22f, heat = 10, range = 110, pierce = true, sound = "turret", pitch = 0.8f, kick = 0.4f, color = new Color(0.495f, 0.33f, 0.715f), body = new Color(0.2025f, 0.135f, 0.2925f), trim = new Color(0.45f, 0.3f, 0.65f) },
+        new GunDef { id = ItemId.CircuitPistol, mode = GunMode.Hitscan, look = GunLook.Pistol, damage = 8, cooldown = 0.1f, heat = 7, range = 60, element = Element.Shock, lightning = true, sound = "zap", pitch = 1.5f, volume = 0.45f, kick = 0.2f, color = new Color(0.275f, 0.935f, 0.495f), body = new Color(0.1125f, 0.3825f, 0.2025f), trim = new Color(0.25f, 0.85f, 0.45f) },
+        new GunDef { id = ItemId.TeslaRifle, mode = GunMode.Hitscan, look = GunLook.Coil, damage = 10, chain = 2, cooldown = 0.2f, heat = 9, range = 60, element = Element.Shock, lightning = true, sound = "zap", pitch = 0.9f, volume = 0.6f, kick = 0.35f, color = new Color(1f, 0.605f, 0.33f), body = new Color(0.4275f, 0.2475f, 0.135f), trim = new Color(0.95f, 0.55f, 0.3f) },
+        new GunDef { id = ItemId.BatteryCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 32, cooldown = 1f, heat = 28, speed = 40, gravity = -1, blast = 3f, size = 0.28f, element = Element.Shock, structure = 2, force = 7, auto = false, sound = "plasma_fire", pitch = 1.2f, kick = 1.2f, color = new Color(0.44f, 0.66f, 1f), body = new Color(0.18f, 0.27f, 0.45f), trim = new Color(0.4f, 0.6f, 1f) },
+        new GunDef { id = ItemId.GlassShardLauncher, mode = GunMode.Projectile, look = GunLook.Shotgun, damage = 8, pellets = 5, spread = 6, cooldown = 0.7f, heat = 18, speed = 60, size = 0.12f, sound = "glass_break", pitch = 1.4f, volume = 0.6f, kick = 0.9f, auto = false, color = new Color(0.825f, 1f, 1f), body = new Color(0.75f, 0.95f, 1f), trim = new Color(0.75f, 0.95f, 1f) },
+        new GunDef { id = ItemId.PlasticBubbleGun, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 5, cooldown = 0.12f, heat = 5, speed = 14, gravity = 1.5f, size = 0.2f, element = Element.Slime, life = 2.5f, sound = "pop", pitch = 2f, volume = 0.4f, kick = 0.1f, color = new Color(0.35f, 1f, 0.45f), body = new Color(0.95f, 0.95f, 0.95f), trim = new Color(0.95f, 0.95f, 0.95f) },
+        new GunDef { id = ItemId.MeteorMinigun, mode = GunMode.Projectile, look = GunLook.Railgun, damage = 7, cooldown = 0.07f, heat = 4.5f, speed = 65, spread = 3, size = 0.14f, element = Element.Fire, sound = "plasma_fire", pitch = 1.8f, volume = 0.3f, kick = 0.15f, color = new Color(1f, 0.44f, 0.22f), body = new Color(0.45f, 0.18f, 0.09f), trim = new Color(1f, 0.4f, 0.2f) },
+        new GunDef { id = ItemId.StardustNova, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 10, burst = 4, burstGap = 0.06f, cooldown = 0.7f, heat = 18, speed = 50, size = 0.18f, star = true, auto = false, sound = "laser", pitch = 2.2f, volume = 0.45f, kick = 0.3f, color = new Color(0.935f, 0.77f, 1f), body = new Color(0.3825f, 0.315f, 0.45f), trim = new Color(0.85f, 0.7f, 1f) },
+        new GunDef { id = ItemId.FrostCrystalCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 26, cooldown = 1.1f, heat = 28, speed = 34, gravity = -3, blast = 3.2f, size = 0.28f, element = Element.Ice, structure = 1.5f, force = 5, auto = false, sound = "plasma_fire", pitch = 1.4f, kick = 1.1f, color = new Color(0.44f, 0.935f, 1f), body = new Color(0.18f, 0.3825f, 0.45f), trim = new Color(0.4f, 0.85f, 1f) },
+        new GunDef { id = ItemId.SlimeLauncher, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 18, cooldown = 0.9f, heat = 24, speed = 24, gravity = -13, blast = 2.6f, size = 0.3f, element = Element.Slime, puddle = true, force = 6, auto = false, sound = "slime_fire", pitch = 0.5f, volume = 0.9f, kick = 1.1f, color = new Color(0.33f, 1f, 0.825f), body = new Color(0.135f, 0.4275f, 0.3375f), trim = new Color(0.3f, 0.95f, 0.75f) },
+        new GunDef { id = ItemId.PlasmaRifle, mode = GunMode.Projectile, look = GunLook.Rifle, damage = 12, cooldown = 0.18f, heat = 10, speed = 55, gravity = -1, blast = 1.4f, size = 0.16f, structure = 1.5f, force = 2, sound = "plasma_fire", pitch = 1.6f, volume = 0.4f, kick = 0.4f, color = new Color(0.88f, 0.44f, 1f), body = new Color(0.36f, 0.18f, 0.45f), trim = new Color(0.8f, 0.4f, 1f) },
+        new GunDef { id = ItemId.GoldSniper, mode = GunMode.Hitscan, look = GunLook.Sniper, damage = 90, cooldown = 2.2f, heat = 60, range = 240, force = 5, auto = false, sound = "turret", pitch = 0.4f, volume = 0.9f, kick = 1.6f, color = new Color(1f, 0.902f, 0.275f), body = new Color(1f, 0.82f, 0.25f), trim = new Color(1f, 0.82f, 0.25f) },
+        new GunDef { id = ItemId.IronHandCannon, mode = GunMode.Projectile, look = GunLook.Revolver, damage = 35, cooldown = 1.1f, heat = 26, speed = 45, gravity = -4, blast = 2.2f, size = 0.22f, structure = 3, force = 8, auto = false, sound = "explode", pitch = 1.3f, volume = 0.6f, kick = 1.4f, color = new Color(0.935f, 0.572f, 0.44f), body = new Color(0.3825f, 0.234f, 0.18f), trim = new Color(0.85f, 0.52f, 0.4f) },
+
+        // ---- batch 2: 30 more ----
+        new GunDef { id = ItemId.HerbLeechRifle, mode = GunMode.Hitscan, look = GunLook.Rifle, damage = 9, cooldown = 0.15f, heat = 7, range = 90, lifesteal = 0.2f, sound = "turret", pitch = 1.2f, kick = 0.3f, color = new Color(0.44f, 1f, 0.33f), body = new Color(0.18f, 0.4275f, 0.135f), trim = new Color(0.4f, 0.95f, 0.3f) },
+        new GunDef { id = ItemId.SlimeMinigun, mode = GunMode.Projectile, look = GunLook.Railgun, damage = 4, cooldown = 0.06f, heat = 3.8f, speed = 45, gravity = -6, spread = 4, size = 0.14f, element = Element.Slime, sound = "slime_fire", pitch = 1.8f, volume = 0.25f, kick = 0.1f, color = new Color(0.33f, 1f, 0.825f), body = new Color(0.135f, 0.4275f, 0.3375f), trim = new Color(0.3f, 0.95f, 0.75f) },
+        new GunDef { id = ItemId.CrystalShotgun, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 7, pellets = 7, spread = 6, cooldown = 0.9f, heat = 22, range = 22, element = Element.Ice, auto = false, force = 2, sound = "explode", pitch = 1.9f, volume = 0.4f, kick = 1.1f, color = new Color(0.44f, 0.935f, 1f), body = new Color(0.18f, 0.3825f, 0.45f), trim = new Color(0.4f, 0.85f, 1f) },
+        new GunDef { id = ItemId.RivetGun, mode = GunMode.Hitscan, look = GunLook.Pistol, damage = 12, cooldown = 0.18f, heat = 8, range = 50, pierce = true, sound = "turret", pitch = 1.6f, volume = 0.45f, kick = 0.3f, color = new Color(0.825f, 0.858f, 0.902f), body = new Color(0.3375f, 0.351f, 0.369f), trim = new Color(0.75f, 0.78f, 0.82f) },
+        new GunDef { id = ItemId.GrenadeRifle, mode = GunMode.Projectile, look = GunLook.Rifle, damage = 18, cooldown = 0.55f, heat = 18, speed = 40, gravity = -8, blast = 2.2f, size = 0.18f, structure = 1.8f, force = 4, sound = "plasma_fire", pitch = 1.3f, volume = 0.5f, kick = 0.7f, color = new Color(0.88f, 0.44f, 1f), body = new Color(0.36f, 0.18f, 0.45f), trim = new Color(0.8f, 0.4f, 1f) },
+        new GunDef { id = ItemId.BerryShotgun, mode = GunMode.Projectile, look = GunLook.Shotgun, damage = 6, pellets = 7, spread = 7, cooldown = 0.8f, heat = 20, speed = 50, size = 0.12f, auto = false, force = 2, sound = "pop", pitch = 0.8f, volume = 0.7f, kick = 1, color = new Color(1f, 0.275f, 0.495f), body = new Color(0.4275f, 0.1125f, 0.2025f), trim = new Color(0.95f, 0.25f, 0.45f) },
+        new GunDef { id = ItemId.WoodLongbow, mode = GunMode.Projectile, look = GunLook.Musket, damage = 50, cooldown = 1.3f, heat = 20, speed = 80, gravity = -4, size = 0.15f, force = 4, auto = false, sound = "throw", pitch = 1.1f, volume = 0.9f, kick = 0.6f, color = new Color(0.792f, 0.55f, 0.33f), body = new Color(0.324f, 0.225f, 0.135f), trim = new Color(0.72f, 0.5f, 0.3f) },
+        new GunDef { id = ItemId.SapSniper, mode = GunMode.Hitscan, look = GunLook.Sniper, damage = 45, cooldown = 1.3f, heat = 35, range = 200, element = Element.Slime, auto = false, force = 3, sound = "turret", pitch = 0.6f, volume = 0.8f, kick = 1.1f, color = new Color(1f, 0.77f, 0.22f), body = new Color(0.45f, 0.315f, 0.09f), trim = new Color(1f, 0.7f, 0.2f) },
+        new GunDef { id = ItemId.SporeSprayer, mode = GunMode.Beam, look = GunLook.Sprayer, damage = 2, cooldown = 0.08f, heat = 3, range = 8, element = Element.Poison, sound = "toxic_hiss", pitch = 1.4f, volume = 0.3f, kick = 0.03f, color = new Color(1f, 0.495f, 0.44f), body = new Color(0.45f, 0.2025f, 0.18f), trim = new Color(1f, 0.45f, 0.4f) },
+        new GunDef { id = ItemId.MossBlaster, mode = GunMode.Hitscan, look = GunLook.Blaster, damage = 10, burst = 3, burstGap = 0.08f, cooldown = 0.6f, heat = 15, range = 70, element = Element.Poison, auto = false, sound = "laser", pitch = 0.9f, volume = 0.5f, kick = 0.3f, color = new Color(0.495f, 0.77f, 0.33f), body = new Color(0.2025f, 0.315f, 0.135f), trim = new Color(0.45f, 0.7f, 0.3f) },
+        new GunDef { id = ItemId.PetalPistol, mode = GunMode.Hitscan, look = GunLook.Pistol, damage = 18, cooldown = 0.3f, heat = 9, range = 70, crit = 0.3f, auto = false, sound = "pop", pitch = 1.4f, volume = 0.6f, kick = 0.4f, color = new Color(1f, 0.682f, 0.935f), body = new Color(0.45f, 0.279f, 0.3825f), trim = new Color(1f, 0.62f, 0.85f) },
+        new GunDef { id = ItemId.CoalMortar, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 40, cooldown = 1.6f, heat = 38, speed = 20, gravity = -16, blast = 4, size = 0.32f, element = Element.Fire, structure = 2.8f, force = 9, auto = false, sound = "plasma_fire", pitch = 0.45f, volume = 0.85f, kick = 1.5f, color = new Color(0.33f, 0.33f, 0.363f), body = new Color(0.135f, 0.135f, 0.1485f), trim = new Color(0.3f, 0.3f, 0.33f) },
+        new GunDef { id = ItemId.IronRevolver, mode = GunMode.Hitscan, look = GunLook.Revolver, damage = 34, cooldown = 0.55f, heat = 13, range = 90, force = 2.5f, auto = false, sound = "turret", pitch = 0.75f, volume = 0.75f, kick = 1, color = new Color(0.935f, 0.572f, 0.44f), body = new Color(0.3825f, 0.234f, 0.18f), trim = new Color(0.85f, 0.52f, 0.4f) },
+        new GunDef { id = ItemId.GoldMinigun, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 5, cooldown = 0.055f, heat = 3.5f, range = 80, spread = 3, crit = 0.15f, sound = "turret", pitch = 1.5f, volume = 0.35f, kick = 0.12f, color = new Color(1f, 0.902f, 0.275f), body = new Color(1f, 0.82f, 0.25f), trim = new Color(1f, 0.82f, 0.25f) },
+        new GunDef { id = ItemId.SulfurShotgun, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 7, pellets = 6, spread = 6, cooldown = 0.85f, heat = 22, range = 20, element = Element.Fire, auto = false, force = 2, sound = "explode", pitch = 1.5f, volume = 0.45f, kick = 1.1f, color = new Color(1f, 1f, 0.33f), body = new Color(0.4275f, 0.4275f, 0.135f), trim = new Color(0.95f, 0.95f, 0.3f) },
+        new GunDef { id = ItemId.GlowstoneSniper, mode = GunMode.Hitscan, look = GunLook.Sniper, damage = 50, cooldown = 1.4f, heat = 38, range = 230, pierce = true, auto = false, sound = "laser", pitch = 0.5f, volume = 0.9f, kick = 1.1f, color = new Color(1f, 1f, 0.715f), body = new Color(0.45f, 0.4275f, 0.2925f), trim = new Color(1f, 0.95f, 0.65f) },
+        new GunDef { id = ItemId.UraniumSMG, mode = GunMode.Projectile, look = GunLook.SMG, damage = 6, cooldown = 0.08f, heat = 6, speed = 70, spread = 2.5f, size = 0.1f, element = Element.Poison, sound = "laser", pitch = 1.3f, volume = 0.35f, kick = 0.15f, color = new Color(0.605f, 1f, 0.22f), body = new Color(0.2475f, 0.45f, 0.09f), trim = new Color(0.55f, 1f, 0.2f) },
+        new GunDef { id = ItemId.ObsidianCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 60, cooldown = 2, heat = 50, speed = 30, gravity = -6, blast = 3.6f, size = 0.36f, structure = 3.5f, force = 12, auto = false, sound = "explode", pitch = 0.6f, volume = 0.9f, kick = 1.9f, color = new Color(0.495f, 0.33f, 0.715f), body = new Color(0.2025f, 0.135f, 0.2925f), trim = new Color(0.45f, 0.3f, 0.65f) },
+        new GunDef { id = ItemId.CircuitRailgun, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 60, cooldown = 1.6f, heat = 50, range = 200, pierce = true, element = Element.Shock, lightning = true, auto = false, force = 4, sound = "zap", pitch = 0.5f, volume = 0.9f, kick = 1.5f, color = new Color(0.275f, 0.935f, 0.495f), body = new Color(0.1125f, 0.3825f, 0.2025f), trim = new Color(0.25f, 0.85f, 0.45f) },
+        new GunDef { id = ItemId.CopperShotgun, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 6, pellets = 6, spread = 6, cooldown = 0.85f, heat = 22, range = 20, chain = 1, element = Element.Shock, lightning = true, auto = false, force = 2, sound = "zap", pitch = 0.8f, volume = 0.7f, kick = 1, color = new Color(1f, 0.605f, 0.33f), body = new Color(0.4275f, 0.2475f, 0.135f), trim = new Color(0.95f, 0.55f, 0.3f) },
+        new GunDef { id = ItemId.BatteryBeam, mode = GunMode.Beam, look = GunLook.Coil, damage = 2.8f, cooldown = 0.08f, heat = 3.2f, range = 14, element = Element.Shock, sound = "zap", pitch = 1.6f, volume = 0.25f, kick = 0.03f, color = new Color(0.44f, 0.66f, 1f), body = new Color(0.18f, 0.27f, 0.45f), trim = new Color(0.4f, 0.6f, 1f) },
+        new GunDef { id = ItemId.GlassRailgun, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 80, cooldown = 1.9f, heat = 60, range = 230, pierce = true, auto = false, force = 5, sound = "plasma_fire", pitch = 1.9f, volume = 0.8f, kick = 1.6f, color = new Color(0.825f, 1f, 1f), body = new Color(0.75f, 0.95f, 1f), trim = new Color(0.75f, 0.95f, 1f) },
+        new GunDef { id = ItemId.FoamDartBlaster, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 4, cooldown = 0.1f, heat = 4, speed = 40, gravity = -5, size = 0.12f, force = 4, sound = "pop", pitch = 1.6f, volume = 0.4f, kick = 0.1f, color = new Color(1f, 1f, 1f), body = new Color(0.95f, 0.95f, 0.95f), trim = new Color(0.95f, 0.95f, 0.95f) },
+        new GunDef { id = ItemId.MeteorShotgun, mode = GunMode.Projectile, look = GunLook.Shotgun, damage = 7, pellets = 6, spread = 7, cooldown = 0.9f, heat = 24, speed = 55, size = 0.14f, element = Element.Fire, auto = false, force = 2, sound = "plasma_fire", pitch = 1.4f, volume = 0.6f, kick = 1.1f, color = new Color(1f, 0.44f, 0.22f), body = new Color(0.45f, 0.18f, 0.09f), trim = new Color(1f, 0.4f, 0.2f) },
+        new GunDef { id = ItemId.StarlightRifle, mode = GunMode.Hitscan, look = GunLook.Rifle, damage = 11, cooldown = 0.16f, heat = 8, range = 100, chain = 1, lightning = false, sound = "laser", pitch = 1.8f, volume = 0.4f, kick = 0.25f, color = new Color(0.935f, 0.77f, 1f), body = new Color(0.3825f, 0.315f, 0.45f), trim = new Color(0.85f, 0.7f, 1f) },
+        new GunDef { id = ItemId.FrostBeam, mode = GunMode.Beam, look = GunLook.Coil, damage = 2.6f, cooldown = 0.08f, heat = 3, range = 18, element = Element.Ice, sound = "freeze_loop", pitch = 1.2f, volume = 0.25f, kick = 0.03f, color = new Color(0.44f, 0.935f, 1f), body = new Color(0.18f, 0.3825f, 0.45f), trim = new Color(0.4f, 0.85f, 1f) },
+        new GunDef { id = ItemId.ToxicMortar, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 26, cooldown = 1.4f, heat = 36, speed = 20, gravity = -16, blast = 3.8f, size = 0.3f, element = Element.Poison, structure = 3, force = 6, auto = false, sound = "plasma_fire", pitch = 0.55f, volume = 0.8f, kick = 1.4f, color = new Color(0.605f, 1f, 0.22f), body = new Color(0.2475f, 0.45f, 0.09f), trim = new Color(0.55f, 1f, 0.2f) },
+        new GunDef { id = ItemId.ThunderCannon, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 40, cooldown = 1.5f, heat = 42, speed = 36, gravity = -2, blast = 4, size = 0.32f, element = Element.Shock, structure = 2, force = 9, auto = false, sound = "plasma_fire", pitch = 1.1f, volume = 0.85f, kick = 1.5f, color = new Color(0.44f, 0.66f, 1f), body = new Color(0.18f, 0.27f, 0.45f), trim = new Color(0.4f, 0.6f, 1f) },
+        new GunDef { id = ItemId.VampirePistol, mode = GunMode.Hitscan, look = GunLook.Pistol, damage = 20, cooldown = 0.32f, heat = 10, range = 70, lifesteal = 0.3f, auto = false, sound = "turret", pitch = 1.3f, volume = 0.6f, kick = 0.45f, color = new Color(1f, 0.275f, 0.495f), body = new Color(0.4275f, 0.1125f, 0.2025f), trim = new Color(0.95f, 0.25f, 0.45f) },
+        new GunDef { id = ItemId.LabSmasher, mode = GunMode.Projectile, look = GunLook.Launcher, damage = 30, cooldown = 1.6f, heat = 40, speed = 30, gravity = -4, blast = 3, size = 0.32f, structure = 5, force = 8, auto = false, sound = "explode", pitch = 0.8f, volume = 0.9f, kick = 1.6f, color = new Color(0.825f, 0.858f, 0.902f), body = new Color(0.3375f, 0.351f, 0.369f), trim = new Color(0.75f, 0.78f, 0.82f) },
     };
 
     static Dictionary<ItemId, GunDef> byId;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics() => byId = null;
+
+    // The stats a shot really has right now: the gun, changed by its enchant and your potions.
+    public static GunDef Effective(GunDef g, EnchantDef e, Player p)
+    {
+        GunDef x = g.Clone();
+        if (e != null)
+        {
+            if (e.element != Element.None) x.element = e.element;
+            x.damage *= e.damage;
+            x.cooldown *= e.rate;
+            x.heat *= e.heat;
+            x.range *= e.range;
+            x.speed *= Mathf.Lerp(1f, e.range, 0.6f);
+            x.lifesteal += e.lifesteal;
+            x.crit += e.crit;
+            x.hitBlast = Mathf.Max(x.hitBlast, e.hitBlast);
+            x.chain += e.chain;
+            x.pierce |= e.pierce;
+            if (e.pellets > 0) { x.pellets += e.pellets; x.spread = Mathf.Max(x.spread, 3f); }
+            x.spread *= e.spread;
+            x.force += e.knock;
+            x.structure *= e.structure;
+            x.color = e.color;
+        }
+        if (p != null)
+        {
+            x.damage *= p.DamageDealtMul;
+            x.cooldown *= p.FireRateMul;
+            x.heat *= p.HeatMul;
+        }
+        return x;
+    }
 
     // The gun stats for this item (null = not one of the table guns).
     public static GunDef Get(ItemId id)

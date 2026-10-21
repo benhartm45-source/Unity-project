@@ -230,9 +230,10 @@ public class Scientist : MonoBehaviour
 
     // ---------- armour you can see ----------
 
-    public void SetArmor(int tier, bool boots)
+    public void SetArmor(int tier, bool boots, ArmorDef def = null)
     {
         if (armorRoot != null) Destroy(armorRoot);
+        if (helmetRoot != null) Destroy(helmetRoot);
         if (bootsRoot != null) Destroy(bootsRoot);
         foreach (GameObject g in bootParts) if (g != null) Destroy(g);
         bootParts.Clear();
@@ -240,17 +241,47 @@ public class Scientist : MonoBehaviour
         {
             armorRoot = new GameObject("Armour");
             armorRoot.transform.SetParent(chest, false);
-            Material plate = tier == 1 ? Gfx.Lit(new Color(0.55f, 0.56f, 0.58f), 0.55f, 0.8f) : Gfx.Glow(new Color(0.35f, 0.85f, 1f), 0.9f);
-            Material trim = tier == 1 ? Gfx.Lit(new Color(0.45f, 0.3f, 0.18f), 0.3f) : Gfx.Lit(new Color(0.8f, 0.9f, 1f), 0.9f, 0.5f);
+            Color pc = def != null ? def.color : tier == 1 ? new Color(0.55f, 0.56f, 0.58f) : new Color(0.35f, 0.85f, 1f);
+            bool glowy = def != null ? def.glow : tier == 2;
+            ArmorStyle style = def != null ? def.style : ArmorStyle.Plates;
+            Material plate = glowy ? Gfx.Glow(pc, 0.9f) : Gfx.Lit(pc, 0.55f, 0.6f);
+            Material trim = glowy ? Gfx.Lit(Color.Lerp(pc, Color.white, 0.6f), 0.9f, 0.5f) : Gfx.Lit(new Color(pc.r * 0.55f, pc.g * 0.5f, pc.b * 0.45f), 0.3f);
             Transform a = armorRoot.transform;
-            Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, 0.135f), new Vector3(0.34f, 0.24f, 0.05f), plate, new Vector3(-6f, 0f, 0f));
-            Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, -0.14f), new Vector3(0.34f, 0.24f, 0.04f), plate);
-            Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, 0.162f), new Vector3(0.06f, 0.22f, 0.012f), trim);
-            for (int s = -1; s <= 1; s += 2)
+            if (style == ArmorStyle.Light)
             {
-                Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.23f, 0.27f, 0f), new Vector3(0.17f, 0.09f, 0.18f), plate, new Vector3(0f, 0f, s * 20f));
-                Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.12f, 0.2f, 0.165f), Vector3.one * 0.025f, trim);   // bolts
-                Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.12f, 0.04f, 0.163f), Vector3.one * 0.025f, trim);
+                // a light vest with glowing stripes
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.11f, 0.13f), new Vector3(0.36f, 0.22f, 0.02f), plate, new Vector3(-6f, 0f, 0f));
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.11f, -0.13f), new Vector3(0.36f, 0.22f, 0.02f), plate);
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.05f, 0.142f), new Vector3(0.34f, 0.02f, 0.01f), Gfx.Glow(Color.Lerp(pc, Color.white, 0.4f), 1.6f));
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.15f, 0.142f), new Vector3(0.34f, 0.02f, 0.01f), Gfx.Glow(Color.Lerp(pc, Color.white, 0.4f), 1.6f));
+                for (int s = -1; s <= 1; s += 2) Gfx.Part(a, PrimitiveType.Cube, new Vector3(s * 0.2f, 0.26f, 0f), new Vector3(0.1f, 0.03f, 0.22f), trim);
+            }
+            else
+            {
+                bool heavy = style == ArmorStyle.Heavy;
+                float t = heavy ? 0.08f : 0.05f, sh = heavy ? 1.35f : 1f;
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, 0.135f + (heavy ? 0.015f : 0f)), new Vector3(heavy ? 0.4f : 0.34f, heavy ? 0.28f : 0.24f, t), plate, new Vector3(-6f, 0f, 0f));
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, -0.14f - (heavy ? 0.015f : 0f)), new Vector3(heavy ? 0.4f : 0.34f, heavy ? 0.28f : 0.24f, t * 0.8f), plate);
+                Gfx.Part(a, PrimitiveType.Cube, new Vector3(0f, 0.12f, 0.165f + (heavy ? 0.03f : 0f)), new Vector3(0.06f, 0.22f, 0.012f), trim);
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.23f, 0.27f, 0f), new Vector3(0.17f, 0.09f, 0.18f) * sh, plate, new Vector3(0f, 0f, s * 20f));
+                    Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.12f, 0.2f, 0.165f + (heavy ? 0.03f : 0f)), Vector3.one * 0.025f, trim);   // bolts
+                    Gfx.Part(a, PrimitiveType.Sphere, new Vector3(s * 0.12f, 0.04f, 0.163f + (heavy ? 0.03f : 0f)), Vector3.one * 0.025f, trim);
+                }
+                if (heavy)
+                {
+                    // a helmet with a visor
+                    helmetRoot = new GameObject("Helmet");
+                    helmetRoot.transform.SetParent(head, false);
+                    Transform hm = helmetRoot.transform;
+                    Gfx.Part(hm, PrimitiveType.Sphere, new Vector3(0f, 0.11f, -0.01f), new Vector3(0.3f, 0.26f, 0.31f), plate);
+                    Gfx.Part(hm, PrimitiveType.Cube, new Vector3(0f, 0.2f, 0f), new Vector3(0.04f, 0.06f, 0.3f), trim);
+                    Gfx.Part(hm, PrimitiveType.Cube, new Vector3(0f, 0.09f, 0.14f), new Vector3(0.22f, 0.05f, 0.04f), Gfx.Glow(Color.Lerp(pc, Color.white, 0.5f), 2f));
+                    Gfx.SetLayer(helmetRoot, 2);
+                    if (firstPerson)      // don't block your own view
+                        foreach (Renderer hr in helmetRoot.GetComponentsInChildren<Renderer>()) hr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+                }
             }
             Gfx.SetLayer(armorRoot, 2);
         }
@@ -273,6 +304,7 @@ public class Scientist : MonoBehaviour
         }
     }
     readonly System.Collections.Generic.List<GameObject> bootParts = new System.Collections.Generic.List<GameObject>();
+    GameObject helmetRoot;
 
     // ---------- what's in your hands ----------
 
@@ -282,8 +314,8 @@ public class Scientist : MonoBehaviour
         Muzzle = null;
         if (item == null) { hold = Hold.None; return; }
         Recipe r = item.R;
-        Color ench = Items.ElementColor(item.enchant);
-        bool enchanted = item.enchant != Element.None;
+        Color ench = item.EnchantColor;
+        bool enchanted = item.Enchanted;
         var model = new GameObject(r.name).transform;
         model.SetParent(gunRoot, false);
         Material body = Gfx.Lit(new Color(0.22f, 0.24f, 0.27f), 0.5f, 0.6f);
@@ -355,7 +387,7 @@ public class Scientist : MonoBehaviour
                 twoHanded = false;
                 Material glass = Gfx.Clear(new Color(0.85f, 0.95f, 1f, 0.35f));
                 Material liquid = Gfx.Glow(r.color, 1.8f);
-                bool bomb = item.id == ItemId.ToxicBomb;
+                bool bomb = r.kind == ItemKind.Throwable;
                 Gfx.Part(model, Ball, new Vector3(0f, 0.06f, 0f), Vector3.one * (bomb ? 0.13f : 0.11f), glass, default, false);
                 Gfx.Part(model, Ball, new Vector3(0f, 0.05f, 0f), Vector3.one * (bomb ? 0.105f : 0.09f), liquid);
                 Gfx.Part(model, Cyl, new Vector3(0f, 0.15f, 0f), new Vector3(0.04f, 0.04f, 0.04f), glass, default, false);

@@ -25,7 +25,7 @@ public class GameHUD : MonoBehaviour
     float dmgAngle;
 
     LabStation station;
-    int stationSel;
+    int stationSel, knownScroll;
     readonly int[] mix = new int[Items.MatCount];      // what's in the station's mix right now
     const int MatCols = 10;
     bool paused, endShown, endWin, howTo;
@@ -90,6 +90,7 @@ public class GameHUD : MonoBehaviour
         if (I == null) return;
         I.station = s;
         I.stationSel = 0;
+        I.knownScroll = 0;
         I.openedAt = Time.unscaledTime;
         System.Array.Clear(I.mix, 0, I.mix.Length);
     }
@@ -481,22 +482,25 @@ public class GameHUD : MonoBehaviour
         if (p.status.poison > 0f) chips.Add(("POISONED", p.status.poison, new Color(0.55f, 1f, 0.2f)));
         if (p.status.freeze > 0f) chips.Add(("FROZEN", p.status.freeze, new Color(0.6f, 0.95f, 1f)));
         else if (p.status.slow > 0f) chips.Add(("SLOWED", p.status.slow, new Color(0.6f, 0.95f, 1f)));
-        if (p.bounceBoots) chips.Add(("DOUBLE JUMP", -1f, new Color(0.4f, 1f, 0.5f)));
-        float cx = x;
+        if (p.DoubleJump) chips.Add(("DOUBLE JUMP", -1f, new Color(0.4f, 1f, 0.5f)));
+        p.BuffChips(chips);
+        float cx = x, cy = y - 74f;
         foreach (var c in chips)
         {
             string t = c.Item2 >= 0f ? c.Item1 + "  " + Mathf.CeilToInt(c.Item2) : c.Item1;
             float cw = 22f + t.Length * 10f;
-            Box(cx, y - 74f, cw, 28f, new Color(0f, 0f, 0f, 0.6f));
-            Box(cx, y - 74f, 4f, 28f, c.Item3);
-            Text(cx + 10f, y - 74f, cw, 28f, t, 15, c.Item3);
+            if (cx + cw > x + 640f) { cx = x; cy -= 32f; }       // next row up
+            Box(cx, cy, cw, 28f, new Color(0f, 0f, 0f, 0.6f));
+            Box(cx, cy, 4f, 28f, c.Item3);
+            Text(cx + 10f, cy, cw, 28f, t, 15, c.Item3);
             cx += cw + 6f;
         }
         // armour
         if (p.armor > 0f)
         {
-            Text(x, y - 42f, 200f, 20f, p.armorTier == 2 ? "CRYSTAL ARMOUR" : "SCRAP ARMOUR", 14, new Color(0.6f, 0.9f, 1f));
-            Bar(x, y - 20f, w, 12f, p.armor / 100f, new Color(0.4f, 0.8f, 1f), new Color(0f, 0f, 0f, 0.55f));
+            string an = p.suit != null ? Items.Get(p.suit.id).name.ToUpperInvariant() : "SHIELD";
+            Text(x, y - 42f, 300f, 20f, an + "  " + Mathf.CeilToInt(p.armor), 14, new Color(0.6f, 0.9f, 1f));
+            Bar(x, y - 20f, w, 12f, p.armor / Mathf.Max(1f, p.armorMax), p.suit != null ? Color.Lerp(p.suit.color, new Color(0.4f, 0.8f, 1f), 0.4f) : new Color(0.4f, 0.8f, 1f), new Color(0f, 0f, 0f, 0.55f));
         }
         // health
         float k = p.health / Player.MaxHealth;
@@ -526,9 +530,9 @@ public class GameHUD : MonoBehaviour
             if (it == null) continue;
             Recipe r = it.R;
             Icon(x + 12f, y + 10f, size - 24f, Items.Icon(r.icon), r.color);
-            if (it.enchant != Element.None)
+            if (it.Enchanted)
             {
-                Color ec = Items.ElementColor(it.enchant);
+                Color ec = it.EnchantColor;
                 Box(x + 4f, y + size - 10f, size - 8f, 5f, ec);
             }
             if (r.kind != ItemKind.Weapon) Text(x, y + size - 30f, size - 8f, 26f, "x" + it.count, 18, Color.white, TextAnchor.MiddleRight);
@@ -543,8 +547,8 @@ public class GameHUD : MonoBehaviour
         HeldItem h = p.Held;
         if (h != null)
         {
-            string n = h.R.name + (h.enchant != Element.None ? "  ·  " + Items.ElementName(h.enchant) : "");
-            Text(x0, y - 36f, total, 30f, n, 20, h.enchant != Element.None ? Items.ElementColor(h.enchant) : Color.white, TextAnchor.MiddleCenter);
+            string n = h.R.name + (h.Enchanted ? "  ·  " + h.EnchantName : "");
+            Text(x0, y - 36f, total, 30f, n, 20, h.Enchanted ? h.EnchantColor : Color.white, TextAnchor.MiddleCenter);
             string hint = h.R.kind == ItemKind.Weapon ? "" : h.R.kind == ItemKind.Throwable ? "click to throw" : "click to drink";
             if (hint.Length > 0) Text(x0, y - 60f, total, 24f, hint, 15, Dim, TextAnchor.MiddleCenter, false);
         }
@@ -983,14 +987,36 @@ public class GameHUD : MonoBehaviour
         int kc = KnownCols(known.Count);
         int rowsNeeded = Mathf.CeilToInt(known.Count / (float)kc);
         float avail = y + h - 16f - yy;
-        float ch = Mathf.Clamp(avail / rowsNeeded, 30f, 70f);
+        float ch = Mathf.Clamp(avail / rowsNeeded, 34f, 70f);
+        int visRows = Mathf.Max(1, Mathf.FloorToInt(avail / ch));
+        // scroll: mouse wheel over the list, or follow the keyboard / controller selection
+        int maxScroll = Mathf.Max(0, rowsNeeded - visRows);
+        if (Event.current.type == EventType.ScrollWheel && R(x, yy, w, avail).Contains(Event.current.mousePosition))
+        {
+            knownScroll += Event.current.delta.y > 0f ? 1 : -1;
+            Event.current.Use();
+        }
+        int selRow = stationSel - mats.Count >= 0 ? (stationSel - mats.Count) / kc : -1;
+        if (selRow >= 0 && Event.current.type == EventType.Repaint && (Mouse.current == null || Mouse.current.delta.ReadValue().sqrMagnitude < 0.5f))
+        {
+            if (selRow < knownScroll) knownScroll = selRow;
+            if (selRow >= knownScroll + visRows) knownScroll = selRow - visRows + 1;
+        }
+        knownScroll = Mathf.Clamp(knownScroll, 0, maxScroll);
+        if (maxScroll > 0)
+        {
+            Text(x, yy - 32f, w - 300f, 28f, "scroll for more  (" + (knownScroll + 1) + "-" + Mathf.Min(rowsNeeded, knownScroll + visRows) + " of " + rowsNeeded + " rows)", 13, Dim, TextAnchor.MiddleRight, false);
+            Bar(x + w - 22f, yy, 6f, visRows * ch, 1f, new Color(1f, 1f, 1f, 0.06f), new Color(0f, 0f, 0f, 0f));
+            Box(x + w - 22f, yy + visRows * ch * knownScroll / rowsNeeded, 6f, visRows * ch * visRows / rowsNeeded, new Color(1f, 1f, 1f, 0.35f));
+        }
         float colW = (w - 60f - (kc - 1) * 10f) / kc;
         for (int i = 0; i < known.Count; i++)
         {
             Recipe r = known[i];
             int cell = mats.Count + i;
-            float rx = x + 30f + (i % kc) * (colW + 10f), ry = yy + (i / kc) * ch;
-            if (ry + ch > y + h) break;
+            int row = i / kc - knownScroll;
+            if (row < 0 || row >= visRows) continue;
+            float rx = x + 30f + (i % kc) * (colW + 10f), ry = yy + row * ch;
             string problem = p.CraftProblem(r);
             bool ok = problem == null;
             bool over = Hover(rx, ry, colW, ch - 6f);
@@ -1095,8 +1121,11 @@ public class GameHUD : MonoBehaviour
             y += 40f;
             float step = Mathf.Clamp(640f / Mathf.Max(1, found.Count), 24f, 56f);
             bool compact = step < 50f;          // lots found: one line each
+            int shown = 0;
             foreach (Recipe r in found)
             {
+                if (y > 990f) { Text(x, y, colW - 20f, 24f, "+ " + (found.Count - shown) + " more (see the station)", 14, Dim, TextAnchor.MiddleLeft, false); y += 30f; break; }
+                shown++;
                 if (compact)
                 {
                     Icon(x, y, 22f, Items.Icon(r.icon), r.color);
