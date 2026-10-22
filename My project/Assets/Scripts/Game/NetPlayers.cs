@@ -6,12 +6,13 @@ using UnityEngine;
 // CO-OP: shows the other scientists in your game.
 // 10 times a second everyone sends where they are and what they're doing (running, aiming, what they're holding);
 // the host passes it on to everyone else. Each friend appears as their own scientist, in their lab colour,
-// with their name above their head. (For now they're just visible - shots don't hit each other online yet.)
+// with their name above their head, and a hit-box so you can shoot them (the hits are sent by NetLabs.cs).
 public class NetPlayers : MonoBehaviour
 {
     class Ghost
     {
         public Scientist model;
+        public RemotePlayer hitbox;
         public Transform root;
         public Vector3 pos, vel;
         public float yaw, pitch, last;
@@ -21,6 +22,20 @@ public class NetPlayers : MonoBehaviour
     }
 
     readonly Dictionary<int, Ghost> ghosts = new Dictionary<int, Ghost>();
+    static NetPlayers I;
+
+    void Awake() => I = this;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() => I = null;
+
+    // Is the friend in this lab slot still in the game (and are they knocked out)? Used by NetMatch to find the winner.
+    public static bool Seen(int slot, out bool dead)
+    {
+        dead = false;
+        if (I == null || !I.ghosts.TryGetValue(slot, out Ghost g) || g.model == null) return false;
+        dead = g.model.dead;
+        return true;
+    }
     float sendCd;
     bool registered;
 
@@ -141,6 +156,16 @@ public class NetPlayers : MonoBehaviour
             g.root.position = new Vector3(px, py, pz);
             g.model = Scientist.Create(g.root, Items.LabColors[slot % 8], slot * 7 + 1);
             g.name = NameFor(slot);
+            // hit-box so your shots and explosions can hit them
+            var hb = new GameObject("Hitbox");
+            hb.transform.SetParent(g.root, false);
+            hb.layer = 0;
+            var cap = hb.AddComponent<CapsuleCollider>();
+            cap.height = 1.8f;
+            cap.radius = 0.42f;
+            cap.center = new Vector3(0f, 0.9f, 0f);
+            g.hitbox = hb.AddComponent<RemotePlayer>();
+            g.hitbox.slot = slot;
             ghosts[slot] = g;
         }
         g.pos = new Vector3(px, py, pz);
@@ -152,6 +177,11 @@ public class NetPlayers : MonoBehaviour
         g.model.aiming = (flags & 2) != 0;
         g.model.sprinting = (flags & 4) != 0;
         g.model.dead = (flags & 8) != 0;
+        if (g.hitbox != null)
+        {
+            g.hitbox.dead = g.model.dead;
+            g.hitbox.GetComponent<Collider>().enabled = !g.model.dead;
+        }
         bool boots = (flags & 16) != 0;
         int heldId = held - 1;
         if (heldId != g.held)

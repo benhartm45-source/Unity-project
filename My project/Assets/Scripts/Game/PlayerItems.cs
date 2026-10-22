@@ -818,6 +818,14 @@ public partial class Player
             Sfx.Play("error", 0.5f);
             Sfx.Play("overheat", 0.35f, 1.3f);
             Fx.Puff(Center + transform.forward * 0.8f, new Color(0.6f, 0.6f, 0.6f, 0.5f), 6, 0.3f, 0.3f, 1.2f, Vector3.up * 0.8f);
+            // one material away from a real recipe? say so!
+            string close = RecipeHints.Close(st, mix);
+            if (close != null)
+            {
+                Sfx.Play("select", 0.6f, close.StartsWith("SO CLOSE") ? 1.4f : 1.1f);
+                GameHUD.Toast(close, new Color(1f, 0.82f, 0.35f));
+                return false;
+            }
             int unknown = 0;
             foreach (Recipe x in Items.For(st)) if (!Discoveries.Knows(x.id)) unknown++;
             GameHUD.Toast("*fizzle*  Nothing happened. " + (unknown > 0 ? unknown + " secret recipe" + (unknown == 1 ? "" : "s") + " left to find here." : "You've found everything here!"), new Color(0.8f, 0.8f, 0.8f));

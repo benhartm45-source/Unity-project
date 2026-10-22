@@ -35,6 +35,11 @@ public class MLGame : MonoBehaviour
     public float ZoneStartsIn => Mathf.Max(0f, ZoneDelay - madnessTime);
     public float ZoneDamage => 4f + madnessTime * 0.03f;
 
+    // online: how many players are in this match (0 = playing alone). Labs 0..OnlinePlayers-1 belong to players.
+    public static int OnlinePlayers { get; private set; }
+    public string winnerName;           // online: who won (for the end screen)
+    bool endShownHere;                  // this player's end screen is up (online the match can carry on without them)
+
     // stats for the end screen
     public float matchTime;
     public int dronesKilled, labsDestroyed, wave;
@@ -54,11 +59,15 @@ public class MLGame : MonoBehaviour
     static void Boot()
     {
         if (I != null) return;
+        // keep running when the window isn't focused (online, a frozen game falls behind everyone else)
+        Application.runInBackground = true;
         var go = new GameObject("Mad Lab Game");
         I = go.AddComponent<MLGame>();
         go.AddComponent<GameHUD>();
         go.AddComponent<NetPlayers>();
         go.AddComponent<NetNodes>();
+        go.AddComponent<NetLabs>();
+        go.AddComponent<NetMatch>();
         MakeBigPropsGatherable();
         GameCam.Ensure();
         if (!ArenaPresent && GameCam.I != null)
@@ -133,6 +142,7 @@ public class MLGame : MonoBehaviour
 
     void Begin(int labSlot)
     {
+        GraphicsQuality.ApplyScene();
         Cleanup();
         RestoreLabs();
         GameCam.Ensure().enabled = true;
@@ -144,16 +154,22 @@ public class MLGame : MonoBehaviour
         foreach (Laboratory l in Laboratory.All) if (l.Index == labSlot) mine = l;
         if (mine == null && Laboratory.All.Count > 0) mine = Laboratory.All[0];
         int myIndex = mine != null ? mine.Index : labSlot;
-        // online: labs that belong to your friends can't be hurt (you're on the same side for now)
-        int friends = Net.Active && NetLobby.Instance != null ? NetLobby.Instance.Members.Count : 0;
+        // online: the labs that belong to the other players are run by THEIR games (NetLabs.cs) - and can be attacked!
+        int players = Net.Active && NetLobby.Instance != null ? NetLobby.Instance.Members.Count : 0;
+        OnlinePlayers = players;
+        // ...and the abandoned rival labs are run by the HOST's game, so they're the same for everyone
         foreach (Laboratory l in Laboratory.All)
         {
             l.ResetLab();
-            l.friendly = l != mine && l.Index < friends;
-            if (l != mine && !l.friendly) l.SetupRival(l.Index * 31 + Random.Range(0, 1000));
+            l.friendly = false;
+            l.remote = l != mine && (l.Index < players || Net.IsClient);
+            if (l != mine && !l.remote) l.SetupRival(l.Index * 31 + Random.Range(0, 1000));
         }
 
         Player.Spawn(mine, myIndex);
+
+        // hint scrolls: new random places (and new hints) every match - RecipeHints.cs
+        HintScroll.SpawnForMatch();
 
         // target dummies (at the "DummySpot" markers)
         dummies.Clear();
@@ -173,6 +189,9 @@ public class MLGame : MonoBehaviour
         zoneRadius = ArenaRadius * 0.98f;
         overAt = -1f;
         won = false;
+        winnerName = null;
+        endShownHere = false;
+        NetMatch.NewMatch();
         playing = true;
         Time.timeScale = 1f;
         MakeZoneWall();
@@ -202,6 +221,7 @@ public class MLGame : MonoBehaviour
         dummies.Clear();
         foreach (Projectile p in FindObjectsByType<Projectile>(FindObjectsSortMode.None)) Destroy(p.gameObject);
         foreach (ToxicCloud c in FindObjectsByType<ToxicCloud>(FindObjectsSortMode.None)) Destroy(c.gameObject);
+        HintScroll.ClearAll();
         GameHUD.CloseAll();
     }
 
@@ -269,37 +289,21 @@ public class MLGame : MonoBehaviour
         }
         matchTime += dt;
 
+        // online, a friend's game never changes phase by itself - it waits for the host's clock (NetMatch.cs)
+        bool followHost = Net.IsClient;
         switch (phase)
         {
             case Phase.Collect:
-                phaseLeft -= dt;
-                if (phaseLeft <= 0f)
-                {
-                    phase = Phase.Experiment;
-                    phaseLeft = ExperimentTime;
-                    GameHUD.Banner("EXPERIMENT", "Craft and brew! Shields drop in 30 seconds.", new Color(0.7f, 0.45f, 1f));
-                    Sfx.Play("phase", 0.8f);
-                }
+                phaseLeft = Mathf.Max(0f, phaseLeft - dt);
+                if (phaseLeft <= 0f && !followHost) EnterPhase(Phase.Experiment);
                 break;
             case Phase.Experiment:
-                phaseLeft -= dt;
-                if (phaseLeft <= 0f)
-                {
-                    phase = Phase.Madness;
-                    phaseLeft = 0f;
-                    nextWave = 20f;
-                    GameHUD.Banner("MADNESS!", "Shields are DOWN. Defend your lab - destroy the others!", new Color(1f, 0.3f, 0.25f));
-                    Sfx.Play("madness", 0.9f);
-                }
+                phaseLeft = Mathf.Max(0f, phaseLeft - dt);
+                if (phaseLeft <= 0f && !followHost) EnterPhase(Phase.Madness);
                 break;
             case Phase.Madness:
                 madnessTime += dt;
-                if (madnessTime > ZoneDelay)
-                {
-                    float k = Mathf.Clamp01((madnessTime - ZoneDelay) / ZoneShrinkTime);
-                    zoneRadius = Mathf.Lerp(ArenaRadius * 0.98f, ZoneEndRadius, k);
-                    if (madnessTime - dt <= ZoneDelay) { GameHUD.Warn("THE ZONE IS CLOSING IN!"); Sfx.Play("zone", 0.8f); }
-                }
+                UpdateZone(dt);
                 if (DronesEnabled)          // raid drones are switched off for now (see DronesEnabled)
                 {
                     nextWave -= dt;
@@ -311,6 +315,57 @@ public class MLGame : MonoBehaviour
         UpdateZoneWall();
 
         if (overAt > 0f && Time.time >= overAt) { overAt = -1f; GameOver(false); }
+    }
+
+    void EnterPhase(Phase p)
+    {
+        phase = p;
+        if (p == Phase.Experiment)
+        {
+            phaseLeft = ExperimentTime;
+            GameHUD.Banner("EXPERIMENT", "Craft and brew! Shields drop in 30 seconds.", new Color(0.7f, 0.45f, 1f));
+            Sfx.Play("phase", 0.8f);
+        }
+        else if (p == Phase.Madness)
+        {
+            phaseLeft = 0f;
+            nextWave = 20f;
+            GameHUD.Banner("MADNESS!", "Shields are DOWN. Defend your lab - destroy the others!", new Color(1f, 0.3f, 0.25f));
+            Sfx.Play("madness", 0.9f);
+        }
+    }
+
+    void UpdateZone(float dt)
+    {
+        if (madnessTime <= ZoneDelay) { zoneRadius = ArenaRadius * 0.98f; return; }
+        float k = Mathf.Clamp01((madnessTime - ZoneDelay) / ZoneShrinkTime);
+        zoneRadius = Mathf.Lerp(ArenaRadius * 0.98f, ZoneEndRadius, k);
+        if (madnessTime - dt <= ZoneDelay) { GameHUD.Warn("THE ZONE IS CLOSING IN!"); Sfx.Play("zone", 0.8f); }
+    }
+
+    // Online (friend's game): the host's clock arrived - follow it.
+    public void ApplyNetClock(Phase hostPhase, float hostLeft, float hostMadness, float hostMatchTime)
+    {
+        if (!playing || phase == Phase.Over || hostPhase == Phase.Over) return;
+        while (phase < hostPhase) EnterPhase(phase + 1);          // banners for any phase we skipped
+        if (hostPhase < phase) phase = hostPhase;                 // (shouldn't happen, but never get ahead of the host)
+        phaseLeft = hostLeft;
+        float before = madnessTime;
+        madnessTime = hostMadness;
+        if (phase == Phase.Madness) UpdateZone(Mathf.Max(0f, madnessTime - before));
+        matchTime = hostMatchTime;
+    }
+
+    // Online: the host says the match is over. winner = the lab slot of the last player standing (-1 = nobody).
+    public void NetMatchOver(int winner)
+    {
+        if (!playing) return;
+        Player p = Player.Local;
+        bool iWon = p != null && winner == p.labIndex;
+        winnerName = winner >= 0 && NetLobby.Instance != null && winner < NetLobby.Instance.Members.Count ? NetLobby.Instance.Members[winner].name : null;
+        if (endShownHere && !iWon) { phase = Phase.Over; return; }   // already showing "you're out"
+        endShownHere = false;
+        GameOver(iWon, true);
     }
 
     void SpawnWave()
@@ -337,6 +392,7 @@ public class MLGame : MonoBehaviour
 
     void CheckWin()
     {
+        if (Net.Active && OnlinePlayers >= 2) return;      // online: the host decides (NetMatch.cs)
         Player p = Player.Local;
         if (p == null || !p.Alive) return;
         foreach (Laboratory l in Laboratory.All)
@@ -360,14 +416,18 @@ public class MLGame : MonoBehaviour
     // Practice helper (pause menu): jump straight to the next phase.
     public void SkipPhase()
     {
+        if (Net.IsClient) { GameHUD.Toast("Only the host can skip phases online.", Color.white); return; }
         if (phase == Phase.Collect || phase == Phase.Experiment) phaseLeft = 0.01f;
     }
 
-    void GameOver(bool win)
+    void GameOver(bool win, bool final = false)
     {
-        if (phase == Phase.Over) return;
-        phase = Phase.Over;
+        if (phase == Phase.Over || endShownHere) return;
         won = win;
+        // online, if you're knocked out for good the match carries on for everyone else:
+        // you see your end screen, but the host's game keeps running the clock and decides the winner
+        if (Net.Active && OnlinePlayers >= 2 && !final) endShownHere = true;
+        else phase = Phase.Over;
         Sfx.Play(win ? "victory" : "defeat", 0.9f);
         foreach (RaidDrone d in RaidDrone.All.ToArray()) if (d != null) Destroy(d.gameObject);
         GameHUD.ShowEnd(win);

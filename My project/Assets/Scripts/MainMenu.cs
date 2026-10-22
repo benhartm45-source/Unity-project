@@ -135,7 +135,7 @@ public class MainMenu : MonoBehaviour
 
     int RowCount()
     {
-        if (screen == Screen2.Main) return 3;
+        if (screen == Screen2.Main) return 4;
         if (screen == Screen2.Settings) return 7;
         switch (Net.Mode)
         {
@@ -202,7 +202,8 @@ public class MainMenu : MonoBehaviour
                     else LoadingScreen.Run("ENTERING THE LAB", () => MLGame.StartMatch(0));
                 }
                 else if (row == 1) GoTo(Screen2.Settings);
-                else GoTo(Screen2.Coop);
+                else if (row == 2) GoTo(Screen2.Coop);
+                else QuitGame();
                 break;
             case Screen2.Settings:
                 if (row == 6) GoTo(Screen2.Main);
@@ -212,6 +213,20 @@ public class MainMenu : MonoBehaviour
                 ChooseCoop(row);
                 break;
         }
+    }
+
+    // QUIT: leaves the co-op game properly first (so friends see you left), then closes the game.
+    // (Inside Unity it just stops Play mode.)
+    void QuitGame()
+    {
+        Click(0.6f);
+        Settings.Save();
+        if (Net.Active) Net.Leave();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     void GoTo(Screen2 s)
@@ -233,8 +248,7 @@ public class MainMenu : MonoBehaviour
             case 3: Settings.Fullscreen = !Settings.Fullscreen; break;
             case 5: Settings.FirstPerson = !Settings.FirstPerson; break;
             case 4:
-                int n = QualitySettings.names.Length;
-                Settings.Quality = (Settings.Quality + dir + n) % n;
+                Settings.Quality = (Settings.Quality + dir + 3) % 3;     // LOW / MEDIUM / HIGH
                 break;
             default: return;
         }
@@ -451,8 +465,9 @@ public class MainMenu : MonoBehaviour
         if (Button(0, R(x, y, 520f, 92f), "PLAY", pad ? "A" : "ENTER", true)) Choose(0);
         if (Button(1, R(x, y + 112f, 520f, 72f), "SETTINGS", "VOLUME, CONTROLS, GRAPHICS", false)) Choose(1);
         if (Button(2, R(x, y + 196f, 520f, 72f), "CO-OP", Net.Active ? "IN A LOBBY - " + Net.JoinCode : "PLAY ONLINE WITH A CODE", false)) Choose(2);
+        if (Button(3, R(x, y + 280f, 520f, 72f), "QUIT", "LEAVE THE GAME", false)) Choose(3);
         string help = pad ? "Stick / D-pad to choose   ·   A to select" : "Arrows / WASD to choose   ·   Enter to select   ·   or use the mouse";
-        Text(R(x, y + 300f, 900f, 30f), help, 17, new Color(1f, 1f, 1f, 0.4f * Appear(0.5f)), TextAnchor.MiddleLeft, false);
+        Text(R(x, y + 384f, 900f, 30f), help, 17, new Color(1f, 1f, 1f, 0.4f * Appear(0.5f)), TextAnchor.MiddleLeft, false);
     }
 
     void PanelFrame(string title, float height)
@@ -514,8 +529,8 @@ public class MainMenu : MonoBehaviour
         SettingRow(1, "Music", Mathf.RoundToInt(Settings.Music * 100f) + "%", Settings.Music);
         SettingRow(2, "Mouse Sensitivity", Settings.Sensitivity.ToString("0.00"), Mathf.InverseLerp(0.25f, 5f, Settings.Sensitivity));
         SettingRow(3, "Fullscreen", Settings.Fullscreen ? "ON" : "OFF", -1f);
-        string[] q = QualitySettings.names;
-        SettingRow(4, "Graphics", q.Length > 0 ? q[Mathf.Clamp(Settings.Quality, 0, q.Length - 1)].ToUpperInvariant() : "-", -1f);
+        int gq = Mathf.Clamp(Settings.Quality, 0, 2);
+        SettingRow(4, "Graphics  (" + GraphicsQuality.Hints[gq] + ")", GraphicsQuality.Names[gq], -1f);
         SettingRow(5, "Camera", Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON", -1f);
         BackButton(6, R(140f, 540f + 6 * 64f + 8f, 240f, 56f));
     }
@@ -735,7 +750,8 @@ public static class Settings
         Sensitivity = PlayerPrefs.GetFloat("set.sens", 1.5f);
         Fullscreen = PlayerPrefs.GetInt("set.fullscreen", 1) == 1;
         FirstPerson = PlayerPrefs.GetInt("set.firstperson", 1) == 1;
-        Quality = PlayerPrefs.GetInt("set.quality", QualitySettings.GetQualityLevel());
+        Quality = PlayerPrefs.GetInt("set.gfx", -1);
+        if (Quality < 0 || Quality > 2) Quality = GraphicsQuality.Detect();     // first time: guess from the graphics card
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -745,9 +761,7 @@ public static class Settings
     {
         Load();
         AudioListener.volume = Volume;
-        if (Quality < 0) Quality = QualitySettings.GetQualityLevel();
-        int n = QualitySettings.names.Length;
-        if (n > 0 && Quality < n && QualitySettings.GetQualityLevel() != Quality) QualitySettings.SetQualityLevel(Quality, true);
+        GraphicsQuality.Apply(Quality);
         if (!Application.isEditor && UnityEngine.Screen.fullScreen != Fullscreen) UnityEngine.Screen.fullScreen = Fullscreen;
     }
 
@@ -758,7 +772,7 @@ public static class Settings
         PlayerPrefs.SetFloat("set.sens", Sensitivity);
         PlayerPrefs.SetInt("set.fullscreen", Fullscreen ? 1 : 0);
         PlayerPrefs.SetInt("set.firstperson", FirstPerson ? 1 : 0);
-        PlayerPrefs.SetInt("set.quality", Quality);
+        PlayerPrefs.SetInt("set.gfx", Quality);
         PlayerPrefs.Save();
     }
 }

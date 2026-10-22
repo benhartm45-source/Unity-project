@@ -7,7 +7,7 @@ using UnityEngine.InputSystem;
 // "Press E" prompts, the station menus (brewing, workbench, enchanting, storage, lab terminal),
 // the pause menu (with the recipes you've discovered), and the win / lose screen.
 // Stations don't show recipes: you put materials into the MIX and press COMBINE to find out what they make.
-public class GameHUD : MonoBehaviour
+public partial class GameHUD : MonoBehaviour
 {
     static GameHUD I;
 
@@ -32,7 +32,7 @@ public class GameHUD : MonoBehaviour
     int pauseSel;
     float openedAt;
 
-    public static bool UIOpen => I != null && (I.station != null || I.paused || I.endShown);
+    public static bool UIOpen => I != null && (I.station != null || I.paused || I.endShown || I.book);
     public static bool Paused => I != null && I.paused;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -102,6 +102,7 @@ public class GameHUD : MonoBehaviour
         I.paused = false;
         I.endShown = false;
         I.howTo = false;
+        I.book = false;
         Time.timeScale = 1f;
     }
 
@@ -110,6 +111,7 @@ public class GameHUD : MonoBehaviour
         if (I == null) return;
         I.station = null;
         I.paused = false;
+        I.book = false;
         I.endShown = true;
         I.endWin = win;
         I.pauseSel = 0;
@@ -129,6 +131,7 @@ public class GameHUD : MonoBehaviour
         bool back = (k != null && k.tabKey.wasPressedThisFrame) || (g != null && g.buttonEast.wasPressedThisFrame);
 
         if (endShown) { MenuKeys(2, ref pauseSel, ChooseEnd); return; }
+        if (BookUpdate()) return;          // the recipe book (B) - GameHUD.Book.cs
 
         if (station != null)
         {
@@ -184,7 +187,7 @@ public class GameHUD : MonoBehaviour
         paused = on;
         pauseSel = 0;
         howTo = false;
-        Time.timeScale = on ? 0f : 1f;
+        Time.timeScale = on && !Net.Active ? 0f : 1f;      // online the game keeps going while you're paused
         Sfx.Play("tick", 0.5f);
     }
 
@@ -230,7 +233,15 @@ public class GameHUD : MonoBehaviour
             case 2: Settings.FirstPerson = !Settings.FirstPerson; Settings.Save(); break;
             case 3: SkipPhase(); SetPause(false); break;
             case 4: GiveTestMaterials(); break;
-            case 5: { SetPause(false); int lab = Player.Local != null ? Player.Local.labIndex : 0; LoadingScreen.Run("RESTARTING THE EXPERIMENT", () => MLGame.StartMatch(lab)); break; }
+            case 5:
+                {
+                    if (Net.IsClient) { Toast("Only the host can restart the match online.", Color.white); break; }
+                    SetPause(false);
+                    if (Net.IsHost && NetLobby.Instance != null) { NetLobby.Instance.StartGame(); break; }      // restarts it for everyone
+                    int lab = Player.Local != null ? Player.Local.labIndex : 0;
+                    LoadingScreen.Run("RESTARTING THE EXPERIMENT", () => MLGame.StartMatch(lab));
+                    break;
+                }
             case 6: SetPause(false); MLGame.I.EndMatch(); break;
         }
     }
@@ -239,8 +250,10 @@ public class GameHUD : MonoBehaviour
     {
         Sfx.Play("tick", 0.5f);
         int lab = Player.Local != null ? Player.Local.labIndex : 0;
+        if (row == 0 && Net.IsClient) { Toast("Waiting for the host to start the next match...", Color.white); return; }
         endShown = false;
-        if (row == 0) LoadingScreen.Run("NEW EXPERIMENT", () => MLGame.StartMatch(lab));
+        if (row == 0 && Net.IsHost && NetLobby.Instance != null) NetLobby.Instance.StartGame();      // everyone plays again together
+        else if (row == 0) LoadingScreen.Run("NEW EXPERIMENT", () => MLGame.StartMatch(lab));
         else MLGame.I.EndMatch();
     }
 
@@ -373,7 +386,7 @@ public class GameHUD : MonoBehaviour
             DrawHealth(p);
             DrawHotbar(p);
             DrawMaterials(p);
-            if (station == null && !paused)
+            if (station == null && !paused && !book)
             {
                 DrawCrosshair(p);
                 DrawPrompt(p);
@@ -386,6 +399,7 @@ public class GameHUD : MonoBehaviour
 
         if (station != null) DrawStation(p);
         if (paused) { if (howTo) DrawHowTo(); else DrawPause(); }
+        if (book && !endShown && !paused) DrawBook();
         if (endShown) DrawEnd(gm);
     }
 
@@ -804,7 +818,7 @@ public class GameHUD : MonoBehaviour
     // Station menus
     // ================================================================
 
-    static int KnownCols(int n) => n > 12 ? 3 : 2;
+    static int KnownCols(int n) => 2;
 
     // Materials you can put in the mix (anything you have, carried or stored).
     static List<int> StationMats(Player p)
@@ -814,17 +828,20 @@ public class GameHUD : MonoBehaviour
         return list;
     }
 
+    static bool Shift => Keyboard.current != null && (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+
+    // (hold SHIFT to add / take out 10 at a time)
     void AddToMix(Player p, int m)
     {
         if (mix[m] >= p.Have(m)) { Sfx.Play("error", 0.35f); return; }
-        mix[m]++;
+        mix[m] = Mathf.Min(p.Have(m), mix[m] + (Shift ? 10 : 1));
         Sfx.Play("tick", 0.4f, 1f + mix[m] * 0.05f);
     }
 
     void TakeFromMix(int m)
     {
         if (mix[m] <= 0) return;
-        mix[m]--;
+        mix[m] = Mathf.Max(0, mix[m] - (Shift ? 10 : 1));
         Sfx.Play("tick", 0.3f, 0.85f);
     }
 
@@ -913,7 +930,7 @@ public class GameHUD : MonoBehaviour
         List<int> mats = StationMats(p);
         List<Recipe> known = Discoveries.Known(st.type);
         Text(x + 30f, yy, w, 28f, "YOUR MATERIALS", 17, new Color(0.7f, 0.45f, 1f));
-        Text(x, yy, w - 30f, 28f, pad ? "A  add one   ·   X  take one out" : "click to add one   ·   right-click to take one out", 14, Dim, TextAnchor.MiddleRight, false);
+        Text(x, yy, w - 30f, 28f, pad ? "A  add one   ·   X  take one out" : "click to add one   ·   right-click to take one out   ·   hold SHIFT for 10", 14, Dim, TextAnchor.MiddleRight, false);
         yy += 32f;
         float tile = (w - 60f - (MatCols - 1) * 6f) / MatCols, tileH = 92f;
         if (mats.Count == 0)
@@ -977,7 +994,8 @@ public class GameHUD : MonoBehaviour
         // ---- recipes you've discovered here ----
         int total = Items.For(st.type).Count;
         Text(x + 30f, yy, w, 28f, "DISCOVERED HERE   " + known.Count + " / " + total, 17, new Color(0.7f, 0.45f, 1f));
-        Text(x, yy, w - 30f, 28f, "click one to make it again", 14, Dim, TextAnchor.MiddleRight, false);
+        Text(x, yy, w - 30f, 28f, "click one to make it again   ·   B  recipe book & hints", 14, Dim, TextAnchor.MiddleRight, false);
+        float headerY = yy;
         yy += 32f;
         if (known.Count == 0)
         {
@@ -987,7 +1005,7 @@ public class GameHUD : MonoBehaviour
         int kc = KnownCols(known.Count);
         int rowsNeeded = Mathf.CeilToInt(known.Count / (float)kc);
         float avail = y + h - 16f - yy;
-        float ch = Mathf.Clamp(avail / rowsNeeded, 34f, 70f);
+        float ch = Mathf.Clamp(avail / rowsNeeded, 56f, 72f);
         int visRows = Mathf.Max(1, Mathf.FloorToInt(avail / ch));
         // scroll: mouse wheel over the list, or follow the keyboard / controller selection
         int maxScroll = Mathf.Max(0, rowsNeeded - visRows);
@@ -1005,11 +1023,11 @@ public class GameHUD : MonoBehaviour
         knownScroll = Mathf.Clamp(knownScroll, 0, maxScroll);
         if (maxScroll > 0)
         {
-            Text(x, yy - 32f, w - 300f, 28f, "scroll for more  (" + (knownScroll + 1) + "-" + Mathf.Min(rowsNeeded, knownScroll + visRows) + " of " + rowsNeeded + " rows)", 13, Dim, TextAnchor.MiddleRight, false);
+            Text(x + 330f, headerY - 32f, 300f, 28f, "scroll for more  (rows " + (knownScroll + 1) + "-" + Mathf.Min(rowsNeeded, knownScroll + visRows) + " of " + rowsNeeded + ")", 13, Dim, TextAnchor.MiddleLeft, false);
             Bar(x + w - 22f, yy, 6f, visRows * ch, 1f, new Color(1f, 1f, 1f, 0.06f), new Color(0f, 0f, 0f, 0f));
             Box(x + w - 22f, yy + visRows * ch * knownScroll / rowsNeeded, 6f, visRows * ch * visRows / rowsNeeded, new Color(1f, 1f, 1f, 0.35f));
         }
-        float colW = (w - 60f - (kc - 1) * 10f) / kc;
+        float colW = (w - 60f - (kc - 1) * 10f - (maxScroll > 0 ? 14f : 0f)) / kc;
         for (int i = 0; i < known.Count; i++)
         {
             Recipe r = known[i];
@@ -1022,23 +1040,42 @@ public class GameHUD : MonoBehaviour
             bool over = Hover(rx, ry, colW, ch - 6f);
             if (over && Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > 0.5f) stationSel = cell;
             bool sel = stationSel == cell;
-            Box(rx, ry, colW, ch - 6f, sel ? new Color(1f, 1f, 1f, 0.1f) : new Color(1f, 1f, 1f, 0.035f));
-            if (sel) Box(rx, ry, 4f, ch - 6f, lab.LabColor);
-            float isz = ch - 16f;
-            Icon(rx + 10f, ry + 5f, isz, Items.Icon(r.icon), r.color);
-            Text(rx + 18f + isz, ry, 260f, (ch - 6f) * 0.6f, r.name, kc > 2 ? 15 : 18, ok ? Color.white : new Color(1f, 1f, 1f, 0.55f));
-            if (!ok) Text(rx + 18f + isz, ry + (ch - 6f) * 0.5f, 300f, (ch - 6f) * 0.5f, problem, 12, new Color(1f, 0.55f, 0.45f), TextAnchor.MiddleLeft, false);
-            float cx = rx + colW - 10f;
-            for (int m = Items.MatCount - 1; m >= 0; m--)
+            float rh = ch - 6f;
+            Box(rx, ry, colW, rh, sel ? new Color(1f, 1f, 1f, 0.11f) : new Color(1f, 1f, 1f, 0.04f));
+            Box(rx, ry, 4f, rh, sel ? lab.LabColor : new Color(r.color.r, r.color.g, r.color.b, ok ? 0.8f : 0.3f));
+            // the recipe on the right: material icon + how many (red = you don't have enough)
+            int kinds = 0;
+            for (int m = 0; m < Items.MatCount; m++) if (r.cost[m] > 0) kinds++;
+            if (r.hideRecipe) kinds = 2;
+            const float step = 46f;
+            float costW = kinds * step;
+            float cx = rx + colW - 8f - costW;
+            if (r.hideRecipe) Text(cx, ry, costW, rh, "? ? ?", 18, new Color(1f, 0.3f, 0.9f), TextAnchor.MiddleCenter);
+            else for (int m = 0; m < Items.MatCount; m++)
             {
                 int need = r.cost[m];
                 if (need <= 0) continue;
                 bool enough = p.Have(m) >= need;
-                cx -= kc > 2 ? 44f : 56f;
-                Icon(cx, ry + (ch - 6f) / 2f - 11f, 22f, Items.MatIcon(m), Items.MatColors[m]);
-                Text(cx + 23f, ry, 24f, ch - 6f, need.ToString(), 15, enough ? Color.white : new Color(1f, 0.35f, 0.3f));
+                Icon(cx, ry + (rh - 24f) / 2f, 24f, Items.MatIcon(m), Items.MatColors[m]);
+                Text(cx + 24f, ry, 22f, rh, need.ToString(), 15, enough ? Color.white : new Color(1f, 0.35f, 0.3f), TextAnchor.MiddleLeft);
+                cx += step;
             }
-            if (Clicked(new Rect(rx, ry, colW, ch - 6f)))
+            // picture and name on the left (the name shrinks to fit before the recipe)
+            float isz = Mathf.Min(40f, rh - 10f);
+            Icon(rx + 12f, ry + (rh - isz) / 2f, isz, Items.Icon(r.icon), ok ? r.color : r.color * 0.6f);
+            float nx = rx + 20f + isz, nw = colW - (nx - rx) - costW - 14f;
+            int fs = 16;
+            while (fs > 11 && r.name.Length * fs * 0.56f > nw) fs--;
+            string label = r.name;
+            int maxChars = Mathf.Max(4, Mathf.FloorToInt(nw / (fs * 0.56f)));
+            if (label.Length > maxChars) label = label.Substring(0, maxChars - 2) + "..";
+            if (ok) Text(nx, ry, nw, rh, label, fs, Color.white, TextAnchor.MiddleLeft);
+            else
+            {
+                Text(nx, ry + 2f, nw, rh * 0.55f, label, fs, new Color(1f, 1f, 1f, 0.5f), TextAnchor.MiddleLeft);
+                Text(nx, ry + rh * 0.5f, nw, rh * 0.48f, problem, 12, new Color(1f, 0.55f, 0.45f, sel || over ? 1f : 0.7f), TextAnchor.MiddleLeft, false);
+            }
+            if (Clicked(new Rect(rx, ry, colW, rh)))
             {
                 stationSel = cell;
                 p.Craft(r);
@@ -1073,8 +1110,22 @@ public class GameHUD : MonoBehaviour
             if (MenuButton(i, ref pauseSel, x, y + i * 80f, 620f, 68f, rows[i], i == 0)) ChoosePause(i);
         // quick settings
         float sx = 900f, sy = 260f;
-        Box(sx, sy, 520f, 200f, Panel);
+        Box(sx, sy, 520f, 270f, Panel);
         Text(sx + 24f, sy + 10f, 400f, 30f, "QUICK SETTINGS", 18, Dim);
+        // graphics: click to switch LOW / MEDIUM / HIGH
+        int gq = Mathf.Clamp(Settings.Quality, 0, 2);
+        bool gOver = Hover(sx + 24f, sy + 200f, 470f, 50f);
+        Box(sx + 24f, sy + 200f, 470f, 50f, gOver ? new Color(1f, 1f, 1f, 0.14f) : new Color(1f, 1f, 1f, 0.06f));
+        Text(sx + 40f, sy + 200f, 300f, 50f, "Graphics  (click to change)", 17, Color.white, TextAnchor.MiddleLeft, false);
+        Text(sx + 24f, sy + 200f, 455f, 50f, GraphicsQuality.Names[gq], 20, gq == 0 ? new Color(1f, 0.8f, 0.3f) : new Color(0.45f, 1f, 0.35f), TextAnchor.MiddleRight);
+        if (Clicked(new Rect(sx + 24f, sy + 200f, 470f, 50f)))
+        {
+            Settings.Quality = (gq + 1) % 3;
+            Settings.Apply();
+            Settings.Save();
+            Sfx.Play("tick", 0.5f);
+            Event.current.Use();
+        }
         Slider(sx + 24f, sy + 50f, "Mouse sensitivity", ref Settings.Sensitivity, 0.25f, 5f);
         Slider(sx + 24f, sy + 120f, "Volume", ref Settings.Volume, 0f, 1f);
         Text(x, 1000f, 1200f, 30f, "Esc to resume  ·  arrows / mouse to choose", 17, Dim, TextAnchor.MiddleLeft, false);
@@ -1107,7 +1158,7 @@ public class GameHUD : MonoBehaviour
             "4. MADNESS: labs can be attacked. Defend yours, smash the others. The zone closes in.\n" +
             "If you're knocked out you come back at your lab - unless it's destroyed. Then you're out!";
         Text(80f, 100f, W - 160f, 170f, how, 18, Color.white, TextAnchor.UpperLeft, false, true);
-        Text(80f, 270f, 1600f, 30f, "Move WASD · Sprint Shift · Jump Space · Fire / use: left click · Aim: right click · E: gather / use · 1-8 or wheel: pick item · Q: quick-heal", 16, Dim, TextAnchor.MiddleLeft, false);
+        Text(80f, 270f, 1600f, 30f, "Move WASD · Sprint Shift · Jump Space · Fire / use: left click · Aim: right click · E: gather / use · 1-8 or wheel: pick item · Q: quick-heal · B: recipe book", 16, Dim, TextAnchor.MiddleLeft, false);
         // what you've discovered so far
         Station[] order = { Station.Brew, Station.Workbench, Station.Enchant, Station.Terminal };
         float colW = (W - 160f) / 4f;
@@ -1165,11 +1216,14 @@ public class GameHUD : MonoBehaviour
         Box(0f, 0f, W, 1080f, new Color(0f, 0f, 0f, 0.7f * a));
         Color c = endWin ? new Color(0.45f, 1f, 0.35f, a) : new Color(1f, 0.32f, 0.26f, a);
         Text(0f, 180f, W, 140f, endWin ? "LAST SCIENTIST STANDING!" : "YOUR EXPERIMENT IS OVER", endWin ? 84 : 72, c, TextAnchor.MiddleCenter);
-        Text(0f, 320f, W, 40f, endWin ? "Every rival lab is rubble. Science wins." : "Better luck in the next experiment.", 26, new Color(1f, 1f, 1f, a), TextAnchor.MiddleCenter, false);
+        string sub = endWin ? (Net.Active && MLGame.OnlinePlayers >= 2 ? "Every other scientist is out. Science wins." : "Every rival lab is rubble. Science wins.")
+            : !string.IsNullOrEmpty(gm.winnerName) ? gm.winnerName + " is the last scientist standing."
+            : Net.Active && MLGame.OnlinePlayers >= 2 && gm.phase != MLGame.Phase.Over ? "You're out - the others are still fighting..." : "Better luck in the next experiment.";
+        Text(0f, 320f, W, 40f, sub, 26, new Color(1f, 1f, 1f, a), TextAnchor.MiddleCenter, false);
         string stats = "Time  " + Clock(gm.matchTime) + "      Labs destroyed  " + gm.labsDestroyed + "      Drones downed  " + gm.dronesKilled;
         Text(0f, 390f, W, 40f, stats, 22, new Color(1f, 1f, 1f, 0.8f * a), TextAnchor.MiddleCenter, false);
         float x = (W - 520f) / 2f;
-        if (MenuButton(0, ref pauseSel, x, 520f, 520f, 76f, "PLAY AGAIN", true)) ChooseEnd(0);
+        if (MenuButton(0, ref pauseSel, x, 520f, 520f, 76f, Net.IsClient ? "PLAY AGAIN (host starts it)" : "PLAY AGAIN", true)) ChooseEnd(0);
         if (MenuButton(1, ref pauseSel, x, 610f, 520f, 66f, "MAIN MENU", false)) ChooseEnd(1);
     }
 }

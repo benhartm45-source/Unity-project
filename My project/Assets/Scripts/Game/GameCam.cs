@@ -30,7 +30,7 @@ public class GameCam : MonoBehaviour
         if (I == null) I = c.gameObject.AddComponent<GameCam>();
         I.cam = c;
         c.nearClipPlane = 0.08f;
-        c.farClipPlane = 900f;
+        c.farClipPlane = GraphicsQuality.FarClip;
         c.clearFlags = CameraClearFlags.Skybox;
         return I;
     }

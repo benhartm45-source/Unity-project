@@ -31,7 +31,9 @@ public class Laboratory : MonoBehaviour, IDamageable
     public readonly int[] storage = new int[Items.MatCount];
     public float hp = 1000f, maxHp = 1000f;
     public bool Destroyed { get; private set; }
-    [HideInInspector] public bool friendly;     // a co-op friend's lab (can't be damaged)
+    [HideInInspector] public bool friendly;     // (not used any more - online labs can all be attacked)
+    [HideInInspector] public bool remote;       // another online player's lab: their game is in charge of it (see NetLabs.cs)
+    public float FieldDownLeft => Mathf.Max(0f, fieldDownUntil - Time.time);
     readonly HashSet<ItemId> built = new HashSet<ItemId>();
 
     // inside the walls (local space)
@@ -353,6 +355,16 @@ public class Laboratory : MonoBehaviour, IDamageable
         }
         float mul = h.structureMul > 0f ? h.structureMul : 1f;
         float dmg = h.damage * mul;
+        if (remote)
+        {
+            // a friend's lab online: send the hit to their game (it applies it and sends back the new health)
+            if (!h.fromPlayer) return;
+            NetLabs.SendLabHit(Index, dmg, false);
+            lastAttackedByPlayer = Time.time;
+            GameHUD.DamageNumber(h.point, dmg, new Color(1f, 0.85f, 0.4f), true);
+            if (!h.dot) GameHUD.HitMarker(false);
+            return;
+        }
         hp -= dmg;
         if (h.fromPlayer)
         {
@@ -367,6 +379,19 @@ public class Laboratory : MonoBehaviour, IDamageable
             Sfx.Play("alarm", 0.6f);
         }
         if (hp <= 0f) Collapse(h.fromPlayer);
+    }
+
+    // Online: the owner's game sent us how their lab is doing.
+    public void ApplyNetState(float newHp, float newMax, float newField, float fieldDownLeft, List<ItemId> nowBuilt, bool destroyed, int[] newStorage)
+    {
+        if (Destroyed) return;
+        foreach (ItemId id in nowBuilt) if (!built.Contains(id)) Build(id, true);
+        maxHp = newMax;
+        hp = newHp;
+        fieldHp = newField;
+        fieldDownUntil = fieldDownLeft > 0f ? Time.time + fieldDownLeft : 0f;
+        for (int m = 0; m < storage.Length && m < newStorage.Length; m++) storage[m] = newStorage[m];
+        if (destroyed) Collapse(true);
     }
 
     // Shots from outside stop at the dome.
@@ -403,6 +428,11 @@ public class Laboratory : MonoBehaviour, IDamageable
         Fx.Burst(point, StarterShield ? new Color(1f, 0.9f, 0.5f) : new Color(0.5f, 0.9f, 1f), 6, 3f, 0.08f, 0.35f, 0f);
         Sfx.At("shield_hit", point, 0.6f, Random.Range(0.9f, 1.15f));
         if (StarterShield) return;
+        if (remote)
+        {
+            if (fromPlayer) { NetLabs.SendLabHit(Index, dmg, true); lastAttackedByPlayer = Time.time; GameHUD.HitMarker(false); }
+            return;
+        }
         fieldHp -= dmg;
         lastFieldHit = Time.time;
         if (fromPlayer) { lastAttackedByPlayer = Time.time; GameHUD.HitMarker(false); }
@@ -506,8 +536,8 @@ public class Laboratory : MonoBehaviour, IDamageable
         UpdateTurret(dt);
         UpdateDome(dt);
 
-        // forcefield recharges a few seconds after it was last hit
-        if (Has(ItemId.Forcefield) && Time.time >= fieldDownUntil && Time.time - lastFieldHit > 4f)
+        // forcefield recharges a few seconds after it was last hit (a friend's lab online: their game does this)
+        if (!remote && Has(ItemId.Forcefield) && Time.time >= fieldDownUntil && Time.time - lastFieldHit > 4f)
             fieldHp = Mathf.Min(fieldMax, fieldHp + 45f * dt);
         if (Has(ItemId.Forcefield) && fieldDownUntil > 0f && Time.time >= fieldDownUntil && fieldHp <= 0f) fieldHp = 1f;
 
@@ -527,7 +557,7 @@ public class Laboratory : MonoBehaviour, IDamageable
         }
 
         // the zone melts down labs it has passed
-        if (!MLGame.ShieldsUp && MLGame.I != null && MLGame.I.OutsideZone(transform.position))
+        if (!remote && !MLGame.ShieldsUp && MLGame.I != null && MLGame.I.OutsideZone(transform.position))
         {
             hp -= maxHp * 0.02f * dt;
             if (Random.value < dt * 4f) Fx.Burst(Center + Random.insideUnitSphere * 5f, new Color(0.9f, 0.3f, 1f), 4, 3f);

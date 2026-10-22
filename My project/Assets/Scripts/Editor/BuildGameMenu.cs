@@ -24,6 +24,7 @@ public static class BuildGameMenu
         EditorApplication.delayCall += EnsureGlowMaterial;
         EditorApplication.delayCall += KeepFogInBuilds;
         EditorApplication.delayCall += ApplyIcon;
+        EditorApplication.delayCall += ApplySplash;
     }
 
     // The game's picture (the glowing flask) - shown for Mad Lab.exe in File Explorer, on the taskbar and the window.
@@ -38,6 +39,33 @@ public static class BuildGameMenu
         PlayerSettings.SetIcons(UnityEditor.Build.NamedBuildTarget.Unknown, new[] { tex }, IconKind.Any);
         AssetDatabase.SaveAssets();
         Debug.Log("Mad Lab icon set (Edit > Project Settings > Player > Icon).");
+    }
+
+    // STARTUP SPLASH: what you see when Mad Lab.exe opens - the Mad Lab logo fading in on a dark background,
+    // instead of the plain Unity one. (Edit > Project Settings > Player > Splash Image to change it.)
+    const string SplashPath = "Assets/MadLab/Icon/MadLab_Splash.png";
+
+    static void ApplySplash()
+    {
+        var imp = AssetImporter.GetAtPath(SplashPath) as TextureImporter;
+        if (imp == null) return;
+        if (imp.textureType != TextureImporterType.Sprite)
+        {
+            imp.textureType = TextureImporterType.Sprite;
+            imp.spriteImportMode = SpriteImportMode.Single;
+            imp.alphaIsTransparency = true;
+            imp.mipmapEnabled = false;
+            imp.SaveAndReimport();
+        }
+        Sprite logo = AssetDatabase.LoadAssetAtPath<Sprite>(SplashPath);
+        if (logo == null) return;
+        PlayerSettings.SplashScreen.show = true;
+        PlayerSettings.SplashScreen.showUnityLogo = false;            // allowed on Unity 6 (if your licence needs it, Unity keeps it)
+        PlayerSettings.SplashScreen.drawMode = PlayerSettings.SplashScreen.DrawMode.AllSequential;
+        PlayerSettings.SplashScreen.animationMode = PlayerSettings.SplashScreen.AnimationMode.Dolly;   // slow zoom
+        PlayerSettings.SplashScreen.backgroundColor = new Color(0.02f, 0.04f, 0.05f);
+        PlayerSettings.SplashScreen.overlayOpacity = 0f;
+        PlayerSettings.SplashScreen.logos = new[] { PlayerSettings.SplashScreenLogo.Create(3f, logo) };
     }
 
     // The game turns fog on from code (the hazy distance on the arena). Unity's "Automatic" setting removes
@@ -108,6 +136,7 @@ public static class BuildGameMenu
         EnsureGlowMaterial();
         KeepFogInBuilds();
         ApplyIcon();
+        ApplySplash();
         if (!UnityEditor.SceneManagement.EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
         // Every map in the map list (File > Build Profiles > Scene List).
