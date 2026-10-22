@@ -106,6 +106,7 @@ public partial class Player : MonoBehaviour, IDamageable
         Look(control);
         Move(dt, control);
         Effects(dt);
+        ArmorUpdate(dt, control);              // armour powers and perks (PlayerArmor.cs)
         ItemsUpdate(dt, control);
         InteractUpdate(dt, control);
 
@@ -231,6 +232,7 @@ public partial class Player : MonoBehaviour, IDamageable
 
     void Landed(float vy)
     {
+        ArmorLanded(vy);
         if (vy < -9f)
         {
             Sfx.Play("land", Mathf.Clamp01(-vy / 25f), Random.Range(0.9f, 1.05f));
@@ -297,6 +299,7 @@ public partial class Player : MonoBehaviour, IDamageable
         float dmg = h.damage;
         if (ironLeft > 0f) dmg *= 0.5f;
         dmg *= DamageTakenMul;                  // armour and potions
+        dmg *= ArmorTakenMul(h);                // armour perks (PlayerArmor.cs)
         if (Blocking && !h.dot && Vector3.Dot(h.dir, Model.transform.forward) < 0.3f)
         {
             // shield up and the hit came from the front
@@ -312,7 +315,8 @@ public partial class Player : MonoBehaviour, IDamageable
             if (armor <= 0f) { ArmorBroke(); Sfx.Play("armor_break", 0.8f); GameHUD.Toast("Your armour broke!", new Color(1f, 0.5f, 0.3f)); }
         }
         health -= dmg;
-        if (h.element != Element.None && !h.dot && !Immune(h.element)) status.Apply(h.element, h.team);
+        if (h.element != Element.None && !h.dot && !Immune(h.element) && !ArmorLucky(h.element)) status.Apply(h.element, h.team);
+        ArmorHurt(h, dmg);
         if (h.force > 0f) push += (h.dir + Vector3.up * 0.4f).normalized * h.force * (ironLeft > 0f ? 0.5f : 1f) * KnockMul;
         if (h.force > 4f) velocity.y = Mathf.Max(velocity.y, h.force * 0.5f);
         lastHurt = Time.time;
@@ -323,7 +327,7 @@ public partial class Player : MonoBehaviour, IDamageable
             Sfx.Play("hurt", 0.7f, Random.Range(0.9f, 1.1f));
             GameHUD.DamageFrom(h.point - h.dir * 3f);
         }
-        if (health <= 0f) Die();
+        if (health <= 0f && !ArmorSaves()) Die();
     }
 
     public void Knock(Vector3 v) => push += v;
@@ -352,6 +356,7 @@ public partial class Player : MonoBehaviour, IDamageable
         Model.dead = false;
         health = MaxHealth;
         RespawnAt = -1f;
+        ArmorReset();
         PlaceAtLab();
         Fx.Burst(transform.position + Vector3.up, Items.LabColors[labIndex % 8], 20, 4f);
         Sfx.Play("respawn", 0.8f);

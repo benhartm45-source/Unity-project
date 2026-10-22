@@ -20,6 +20,7 @@ public partial class Player
         get
         {
             float m = suit != null ? suit.speed : 1f;
+            m *= ArmorSpeedMul;
             foreach (Buff b in buffs) m *= b.def.speed;
             return m;
         }
@@ -52,12 +53,12 @@ public partial class Player
 
     public float DamageDealtMul
     {
-        get { float m = 1f; foreach (Buff b in buffs) m *= b.def.dealt; return m; }
+        get { float m = ArmorDealtMul; foreach (Buff b in buffs) m *= b.def.dealt; return m; }
     }
 
     public float FireRateMul
     {
-        get { float m = 1f; foreach (Buff b in buffs) m *= b.def.rate; return Mathf.Max(0.2f, m); }
+        get { float m = suit != null ? suit.rate : 1f; foreach (Buff b in buffs) m *= b.def.rate; return Mathf.Max(0.2f, m); }
     }
 
     public float HeatMul
@@ -102,7 +103,7 @@ public partial class Player
     // Drones and turrets can't see you (Ghost Potion).
     public bool Hidden
     {
-        get { foreach (Buff b in buffs) if (b.def.hidden) return true; return false; }
+        get { if (ArmorHidden) return true; foreach (Buff b in buffs) if (b.def.hidden) return true; return false; }
     }
 
     // ---------------- armour ----------------
@@ -138,9 +139,10 @@ public partial class Player
         }
         if (d.cleanse) status.Clear();
         if (!d.Timed) return;
+        float time = d.time * (suit != null ? suit.potionTime : 1f);     // (Alchemist armour makes potions last longer)
         foreach (Buff b in buffs)
-            if (b.def == d) { b.left = d.time; return; }        // drinking it again tops it up
-        buffs.Add(new Buff { def = d, name = r.name.ToUpperInvariant(), color = r.color, left = d.time });
+            if (b.def == d) { b.left = time; return; }        // drinking it again tops it up
+        buffs.Add(new Buff { def = d, name = r.name.ToUpperInvariant(), color = r.color, left = time });
     }
 
     void ClearBuffs()
@@ -213,5 +215,6 @@ public partial class Player
     {
         foreach (Buff b in buffs) into.Add((b.name, b.left, b.color));
         if (healRateLeft > 0f) into.Add(("HEALING", healRateLeft, new Color(1f, 0.35f, 0.4f)));
+        ArmorChips(into);
     }
 }

@@ -936,6 +936,7 @@ public partial class Player
 
     public void AddMaterial(int m, int n)
     {
+        n += ArmorGatherBonus();                // (Scavenger armour and friends)
         backpack[m] += n;
         GameHUD.MaterialPopup(m, n);
         if (InsideOwnLab) StoreBackpack();

@@ -1581,6 +1581,7 @@ public static class Guns
         if (p != null)
         {
             x.damage *= p.DamageDealtMul;
+            if (p.suit != null) x.lifesteal += p.suit.lifesteal;    // (Vampire armour and friends)
             x.cooldown *= p.FireRateMul;
             x.heat *= p.HeatMul;
         }
