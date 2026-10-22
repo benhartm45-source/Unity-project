@@ -385,6 +385,8 @@ public enum ItemId
     KhonsuCrescentBlade, NutSSkyBow, GebSEarthFist, SetSSandstormAxe, BennuPhoenixTorch, AmmitSDevourer, MaAtBalanceScale, ApepCoil, CanopicSoulJar,
     RoyalScarabCrown, ObsidianSunDisc, LapisLazuliWand, TurquoiseSpear, CarnelianHammer, MalachiteBow, ElectrumPistol, MeteorIronBlade,
     StargazerSStaff, AstralCompass,
+    // holidays
+    SnowballGun,
 }
 
 public class Recipe
@@ -2895,6 +2897,9 @@ public static class Items
         // 10 of every single material. The recipe is never shown anywhere - not even after you've made it.
         new Recipe { id = ItemId.OmegaRay, name = "OMEGA RAY", kind = ItemKind.Weapon, station = Station.Workbench, cost = Every(10), time = 4f, hideRecipe = true,
             desc = "The ultimate weapon. A piercing beam of pure chaos that chains, explodes, burns labs and heals you. Nobody knows how it's made...", color = new Color(1f, 0.25f, 0.9f), icon = "gun_omega_ray" },
+        // ---------------- holidays ----------------
+        // (in WINTER everyone starts with one - and it's a secret recipe the rest of the year)
+        Gun(ItemId.SnowballGun, "Snowball Gun", "Rapid-fire snowballs! They freeze people and knock them back.", Cost(Mat.Crystal, 2, Mat.Plastic, 1, Mat.Moss, 1), 1.4f, "gun_snowball_gun"),
     };
 
     static Dictionary<ItemId, Recipe> byId;

@@ -1546,6 +1546,8 @@ public static class Guns
         new GunDef { id = ItemId.MeteorIronBlade, mode = GunMode.Melee, look = GunLook.Blade, damage = 29f, cooldown = 0.47f, heat = 5f, reach = 4.2f, arc = 110f, force = 3f, auto = true, sound = "swing", pitch = 0.99f, kick = 0.35f, element = Element.Fire, buffSpeed = 1.3f, color = new Color(1f, 0.5f, 0.1f), body = new Color(0.51f, 0.34f, 0.722f), trim = new Color(1f, 0.4f, 0.2f) },
         new GunDef { id = ItemId.StargazerSStaff, mode = GunMode.Projectile, look = GunLook.Staff, damage = 22f, cooldown = 2.78f, heat = 8f, speed = 40f, size = 0.22f, life = 3f, star = true, auto = false, sound = "zap", pitch = 0.94f, kick = 0.35f, orbit = 3, fieldTime = 5f, color = new Color(0.977f, 0.805f, 1f), body = new Color(0.425f, 0.35f, 0.5f), trim = new Color(0.85f, 0.7f, 1f) },
         new GunDef { id = ItemId.AstralCompass, mode = GunMode.Projectile, look = GunLook.Orb, damage = 24f, cooldown = 0.98f, heat = 12f, speed = 22f, size = 0.35f, life = 4f, star = true, auto = false, sound = "phase", pitch = 1.08f, kick = 0.3f, color = new Color(0.977f, 0.805f, 1f), body = new Color(0.425f, 0.35f, 0.5f), trim = new Color(0.85f, 0.7f, 1f) },
+        // ---- holidays ----
+        new GunDef { id = ItemId.SnowballGun, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 12, cooldown = 0.2f, heat = 6, speed = 36, gravity = -9, size = 0.2f, force = 4, element = Element.Ice, sound = "pop", pitch = 0.9f, volume = 0.6f, kick = 0.3f, color = new Color(0.95f, 0.98f, 1f), body = new Color(0.3f, 0.55f, 0.85f), trim = new Color(0.9f, 0.95f, 1f) },
     };
 
     static Dictionary<ItemId, GunDef> byId;

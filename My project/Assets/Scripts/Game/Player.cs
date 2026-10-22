@@ -293,6 +293,7 @@ public partial class Player : MonoBehaviour, IDamageable
     public void TakeHit(Hit h)
     {
         if (dead || !MLGame.Playing) return;
+        NoteAttacker(h);                        // who hit us last gets the credit (PlayerDeath.cs)
         float dmg = h.damage;
         if (ironLeft > 0f) dmg *= 0.5f;
         dmg *= DamageTakenMul;                  // armour and potions
@@ -339,6 +340,7 @@ public partial class Player : MonoBehaviour, IDamageable
         CancelUse();
         DropBackpack();
         bool canRespawn = MyLab != null && !MyLab.Destroyed;
+        OnKnockedOut(canRespawn);               // lose your gun, get some materials back, tell everyone (PlayerDeath.cs)
         RespawnAt = canRespawn ? Time.time + 6f : -1f;
         GameHUD.Toast(canRespawn ? "You got knocked out! Your lab will patch you up..." : "ELIMINATED - your lab is gone, so there's no coming back.", new Color(1f, 0.35f, 0.3f));
         MLGame.I?.PlayerDied(canRespawn);
