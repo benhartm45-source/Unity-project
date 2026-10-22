@@ -32,6 +32,10 @@ public partial class GameHUD : MonoBehaviour
     int pauseSel;
     float openedAt;
 
+    float closedAt = -10f;
+    // True for a moment after a station closes (so the same E press doesn't open it straight back up).
+    public static bool JustClosed => I != null && Time.unscaledTime - I.closedAt < 0.25f;
+
     public static bool UIOpen => I != null && (I.station != null || I.paused || I.endShown || I.book);
     public static bool Paused => I != null && I.paused;
 
@@ -142,7 +146,16 @@ public partial class GameHUD : MonoBehaviour
                 Sfx.Play("station_close", 0.4f);
                 return;
             }
-            if (station.type == Station.Storage || Time.unscaledTime - openedAt < 0.15f) return;
+            if (Time.unscaledTime - openedAt < 0.15f) return;
+            // E (the same key that opened it) closes it again - no need for Esc, so the mouse stays locked
+            if (k != null && k.eKey.wasPressedThisFrame)
+            {
+                station = null;
+                closedAt = Time.unscaledTime;
+                Sfx.Play("station_close", 0.4f);
+                return;
+            }
+            if (station.type == Station.Storage) return;
             List<int> mats = StationMats(p);
             List<Recipe> known = Discoveries.Known(station.type);
             int cells = mats.Count + known.Count;
@@ -165,7 +178,7 @@ public partial class GameHUD : MonoBehaviour
                 }
                 if (remove && stationSel < mats.Count) TakeFromMix(mats[stationSel]);
             }
-            bool combine = (k != null && (k.eKey.wasPressedThisFrame || k.cKey.wasPressedThisFrame)) || (g != null && g.buttonNorth.wasPressedThisFrame);
+            bool combine = (k != null && (k.cKey.wasPressedThisFrame || k.fKey.wasPressedThisFrame)) || (g != null && g.buttonNorth.wasPressedThisFrame);
             bool clear = (k != null && k.rKey.wasPressedThisFrame) || (g != null && g.leftShoulder.wasPressedThisFrame);
             if (combine) Combine(p);
             if (clear) ClearMix();
@@ -883,7 +896,7 @@ public partial class GameHUD : MonoBehaviour
         }
         Text(x + 30f, y + 68f, w - 60f, 30f, sub, 17, Dim, TextAnchor.MiddleLeft, false);
         bool pad = Gamepad.current != null;
-        Text(x, y + 18f, w - 30f, 50f, pad ? "B  close" : "ESC / TAB  close", 16, Dim, TextAnchor.MiddleRight);
+        Text(x, y + 18f, w - 30f, 50f, pad ? "B  close" : "E  close", 16, Dim, TextAnchor.MiddleRight);
         float yy = y + 110f;
 
         if (st.type == Station.Storage)
@@ -982,7 +995,7 @@ public partial class GameHUD : MonoBehaviour
         bool overC = Hover(bx2, yy + 14f, 200f, 68f);
         Box(bx2, yy + 14f, 200f, 68f, canMix ? (overC ? new Color(0.45f, 0.95f, 0.35f) : new Color(0.28f, 0.68f, 0.22f)) : new Color(1f, 1f, 1f, 0.08f));
         Text(bx2, yy + 14f, 200f, 46f, "COMBINE", 26, canMix ? Color.white : Dim, TextAnchor.MiddleCenter);
-        Text(bx2, yy + 52f, 200f, 24f, pad ? "Y" : "E", 14, canMix ? Color.white : Dim, TextAnchor.MiddleCenter, false);
+        Text(bx2, yy + 52f, 200f, 24f, pad ? "Y" : "C", 14, canMix ? Color.white : Dim, TextAnchor.MiddleCenter, false);
         if (Clicked(new Rect(bx2, yy + 14f, 200f, 68f))) { Combine(p); Event.current.Use(); }
         float cbx = x + w - 130f;
         Box(cbx, yy + 14f, 84f, 68f, Hover(cbx, yy + 14f, 84f, 68f) ? new Color(1f, 1f, 1f, 0.16f) : new Color(1f, 1f, 1f, 0.07f));

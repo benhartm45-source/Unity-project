@@ -698,6 +698,7 @@ public class LabStation : MonoBehaviour, IInteractable
 
     public void Use(Player p)
     {
+        if (GameHUD.JustClosed) return;      // that E press just closed it
         p.Model.PlayPoke();
         GameHUD.OpenStation(this);
         Sfx.Play("station_open", 0.5f);
