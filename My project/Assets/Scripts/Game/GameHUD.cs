@@ -984,8 +984,8 @@ public partial class GameHUD : MonoBehaviour
 
         if (st.type == Station.Storage)
         {
-            const int cols = 5;
-            float tw = (w - 60f - (cols - 1) * 10f) / cols, th = 104f;
+            const int cols = 6;
+            float tw = (w - 60f - (cols - 1) * 10f) / cols, th = 92f;
             for (int m = 0; m < Items.MatCount; m++)
             {
                 float tx = x + 30f + (m % cols) * (tw + 10f), ty = yy + (m / cols) * (th + 10f);
@@ -995,7 +995,7 @@ public partial class GameHUD : MonoBehaviour
                 Text(tx + 66f, ty + 6f, tw - 70f, 30f, Items.MatNames[m], 17, n > 0 ? Items.MatColors[m] : new Color(1f, 1f, 1f, 0.3f), TextAnchor.MiddleLeft, true);
                 Text(tx + 66f, ty + 40f, tw - 80f, 56f, n.ToString(), 34, n > 0 ? Color.white : new Color(1f, 1f, 1f, 0.25f), TextAnchor.MiddleLeft);
             }
-            Text(x + 30f, yy + 5 * (th + 10f) + 10f, w - 60f, 90f, "If your lab gets destroyed, everything stored here spills out for anyone to take. If YOU get knocked out, you drop what you're carrying (not what's stored).", 18, Dim, TextAnchor.UpperLeft, false, true);
+            Text(x + 30f, yy + ((Items.MatCount + cols - 1) / cols) * (th + 10f) + 10f, w - 60f, 90f, "If your lab gets destroyed, everything stored here spills out for anyone to take. If YOU get knocked out, you drop what you're carrying (not what's stored).", 18, Dim, TextAnchor.UpperLeft, false, true);
             return;
         }
 

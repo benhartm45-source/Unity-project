@@ -33,6 +33,7 @@ public class Scientist : MonoBehaviour
 
     // animation state
     float phase, twist, lean, sideLean, landDip, flinch, deadK, recoil, breath, prevPhaseSin;
+    float swingT = -1f, swingLen = 0.3f; bool swingSpin;
     float drinkT = -1f, throwT = -1f, gatherT = -1f, workT = -1f, workLen, pokeT = -1f;
     bool wasGrounded = true;
     float airTime;
@@ -546,6 +547,111 @@ public class Scientist : MonoBehaviour
                 gripL = new Vector3(0f, -0.05f, 0.2f);
                 muzzleZ = 0.5f;
                 break;
+            case GunLook.Blade:
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.36f), new Vector3(0.018f, 0.07f, 0.62f), trim);
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.36f), new Vector3(0.022f, 0.012f, 0.6f), glow);
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.04f), new Vector3(0.05f, 0.03f, 0.2f), body, new Vector3(0f, 90f, 0f));   // guard
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, -0.06f), new Vector3(0.035f, 0.08f, 0.035f), grip, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, 0.02f, -0.15f), Vector3.one * 0.045f, body);
+                twoHanded = false; gripR = new Vector3(0f, 0f, -0.06f);
+                muzzleZ = 0.66f; muzzleY = 0.02f;
+                break;
+            case GunLook.Hammer:
+                hold = Hold.Heavy;
+                Gfx.Part(m, Cyl, new Vector3(0f, 0f, 0.15f), new Vector3(0.04f, 0.32f, 0.04f), grip, X90);
+                Gfx.Part(m, Box, new Vector3(0f, 0f, 0.5f), new Vector3(0.24f, 0.15f, 0.15f), body);
+                Gfx.Part(m, Box, new Vector3(0f, 0f, 0.5f), new Vector3(0.25f, 0.04f, 0.16f), glow);
+                foreach (float x in new[] { -0.13f, 0.13f }) Gfx.Part(m, Box, new Vector3(x, 0f, 0.5f), new Vector3(0.02f, 0.17f, 0.17f), trim);
+                gripR = new Vector3(0f, 0f, -0.08f); gripL = new Vector3(0f, 0f, 0.1f);
+                muzzleZ = 0.58f; muzzleY = 0f;
+                break;
+            case GunLook.Spear:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.25f), new Vector3(0.03f, 0.55f, 0.03f), body, X90);
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.86f), new Vector3(0.012f, 0.07f, 0.16f), trim, new Vector3(0f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.84f), new Vector3(0.07f, 0.012f, 0.12f), glow);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.76f), new Vector3(0.045f, 0.02f, 0.045f), trim, X90);
+                gripR = new Vector3(0f, -0.01f, -0.05f); gripL = new Vector3(0f, -0.01f, 0.3f);
+                muzzleZ = 0.95f;
+                break;
+            case GunLook.Staff:
+            case GunLook.Wand:
+            {
+                bool staff = g.look == GunLook.Staff;
+                float len = staff ? 0.5f : 0.18f;
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, len * 0.5f), new Vector3(staff ? 0.035f : 0.022f, len, staff ? 0.035f : 0.022f), body, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, 0.02f, len * 1.5f), Vector3.one * (staff ? 0.11f : 0.05f), glow);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, len * 1.4f), new Vector3(staff ? 0.08f : 0.04f, 0.015f, staff ? 0.08f : 0.04f), trim, X90);
+                if (staff) { gripR = new Vector3(0f, 0f, 0.05f); gripL = new Vector3(0f, 0f, 0.35f); }
+                else { twoHanded = false; gripR = new Vector3(0f, 0f, -0.02f); }
+                muzzleZ = len * 1.5f + (staff ? 0.08f : 0.04f); muzzleY = 0.02f;
+                break;
+            }
+            case GunLook.Orb:
+                Gfx.Part(m, Ball, new Vector3(0f, 0.05f, 0.15f), Vector3.one * 0.17f, glow);
+                Gfx.Part(m, Cyl, new Vector3(0f, -0.04f, 0.15f), new Vector3(0.12f, 0.02f, 0.12f), trim);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.15f), new Vector3(0.2f, 0.006f, 0.2f), body, new Vector3(0f, 0f, 70f));
+                gripR = new Vector3(0.07f, -0.05f, 0.15f); gripL = new Vector3(-0.07f, -0.05f, 0.15f);
+                muzzleZ = 0.28f; muzzleY = 0.05f;
+                break;
+            case GunLook.Shield:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.2f), new Vector3(0.42f, 0.02f, 0.5f), body, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.05f, 0.215f), new Vector3(0.3f, 0.02f, 0.36f), trim, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, 0.05f, 0.23f), Vector3.one * 0.08f, glow);
+                gripR = new Vector3(0.05f, 0f, 0.15f); gripL = new Vector3(-0.12f, 0f, 0.15f);
+                muzzleZ = 0.3f; muzzleY = 0.05f;
+                break;
+            case GunLook.Whip:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0f, 0f), new Vector3(0.035f, 0.09f, 0.035f), grip, X90);
+                for (int i = 0; i < 7; i++) Gfx.Part(m, Ball, new Vector3(0f, -0.02f * i * i * 0.1f, 0.12f + i * 0.08f), Vector3.one * (0.035f - i * 0.003f), i == 6 ? glow : body);
+                twoHanded = false; gripR = new Vector3(0f, 0f, -0.02f);
+                muzzleZ = 0.7f; muzzleY = -0.05f;
+                break;
+            case GunLook.Bow:
+                for (int i = -3; i <= 3; i++)
+                {
+                    float a = i * 15f;
+                    Gfx.Part(m, Box, new Vector3(0f, Mathf.Sin(a * Mathf.Deg2Rad) * 0.38f, 0.1f + Mathf.Cos(a * Mathf.Deg2Rad) * 0.08f - 0.08f), new Vector3(0.025f, 0.11f, 0.03f), i == 0 ? grip : body, new Vector3(-a, 0f, 0f));
+                }
+                Gfx.Part(m, Box, new Vector3(0f, 0f, -0.06f), new Vector3(0.004f, 0.72f, 0.004f), glow);    // string
+                Gfx.Part(m, Box, new Vector3(0f, 0f, 0.1f), new Vector3(0.01f, 0.01f, 0.36f), trim);        // arrow
+                twoHanded = true; gripR = new Vector3(0f, 0f, -0.06f); gripL = new Vector3(0f, 0f, 0.1f);
+                muzzleZ = 0.3f; muzzleY = 0f;
+                break;
+            case GunLook.Fan:
+                for (int i = -3; i <= 3; i++) Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.12f), new Vector3(0.006f, 0.04f, 0.3f), i % 2 == 0 ? body : trim, new Vector3(i * 14f, 0f, 0f));
+                Gfx.Part(m, Box, new Vector3(0.006f, 0.02f, 0.2f), new Vector3(0.004f, 0.3f, 0.02f), glow);
+                twoHanded = false; gripR = new Vector3(0f, 0f, -0.02f);
+                muzzleZ = 0.3f;
+                break;
+            case GunLook.Gauntlet:
+                Gfx.Part(m, Box, new Vector3(0f, 0f, 0.05f), new Vector3(0.12f, 0.11f, 0.22f), body);
+                Gfx.Part(m, Box, new Vector3(0f, 0.01f, 0.18f), new Vector3(0.13f, 0.08f, 0.07f), trim);
+                for (int i = 0; i < 4; i++) Gfx.Part(m, Box, new Vector3(-0.045f + i * 0.03f, 0.05f, 0.18f), new Vector3(0.02f, 0.015f, 0.05f), glow);
+                twoHanded = false; gripR = new Vector3(0f, 0f, 0.05f);
+                muzzleZ = 0.24f; muzzleY = 0.01f;
+                break;
+            case GunLook.Jar:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.04f, 0.12f), new Vector3(0.16f, 0.1f, 0.16f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.04f, 0.12f), new Vector3(0.13f, 0.08f, 0.13f), glow);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.15f, 0.12f), new Vector3(0.09f, 0.02f, 0.09f), trim);
+                gripR = new Vector3(0.08f, 0f, 0.12f); gripL = new Vector3(-0.08f, 0f, 0.12f);
+                muzzleZ = 0.22f; muzzleY = 0.08f;
+                break;
+            case GunLook.Disc:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.03f, 0.15f), new Vector3(0.26f, 0.012f, 0.26f), body);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.033f, 0.15f), new Vector3(0.2f, 0.012f, 0.2f), glow);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.036f, 0.15f), new Vector3(0.08f, 0.012f, 0.08f), trim);
+                twoHanded = false; gripR = new Vector3(0.1f, 0f, 0.1f);
+                muzzleZ = 0.3f;
+                break;
+            case GunLook.Bell:
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.0f), new Vector3(0.03f, 0.08f, 0.03f), grip, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.16f), new Vector3(0.14f, 0.09f, 0.14f), trim, X90);
+                Gfx.Part(m, Cyl, new Vector3(0f, 0.02f, 0.25f), new Vector3(0.19f, 0.015f, 0.19f), body, X90);
+                Gfx.Part(m, Ball, new Vector3(0f, 0.02f, 0.25f), Vector3.one * 0.05f, glow);
+                twoHanded = false; gripR = new Vector3(0f, 0f, -0.02f);
+                muzzleZ = 0.3f;
+                break;
             default:    // Blaster
                 Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.12f), new Vector3(0.08f, 0.1f, 0.36f), body);
                 for (int i = 0; i < 3; i++) Gfx.Part(m, Box, new Vector3(0f, 0.02f, 0.27f + i * 0.05f), new Vector3(0.13f, 0.13f, 0.012f), trim, new Vector3(0f, 0f, 45f));
@@ -564,6 +670,7 @@ public class Scientist : MonoBehaviour
     public void Kick(float amount) => recoil = Mathf.Min(1.5f, recoil + amount);
     public void PlayDrink() => drinkT = 0f;
     public void PlayThrow() => throwT = 0f;
+    public void PlaySwing(float len, bool spin) { swingT = 0f; swingLen = Mathf.Max(0.12f, len); swingSpin = spin; }
     public void PlayGather() => gatherT = 0f;
     public void PlayWork(float seconds) { workT = 0f; workLen = seconds; }
     public void PlayPoke() => pokeT = 0f;
@@ -594,6 +701,7 @@ public class Scientist : MonoBehaviour
         Advance(ref gatherT, GatherTime, dt);
         Advance(ref workT, workLen, dt);
         Advance(ref pokeT, 0.35f, dt);
+        Advance(ref swingT, swingLen, dt);
         flinch = Mathf.MoveTowards(flinch, 0f, dt * 4f);
         recoil = Mathf.MoveTowards(recoil, 0f, dt * 7f);
         breath += dt * 1.6f;
@@ -738,6 +846,19 @@ public class Scientist : MonoBehaviour
                 wantPos += new Vector3(0f, 0.01f, -0.07f) * recoil;
                 wantRot = wantRot * Quaternion.Euler(-7f * recoil, 0f, 0f);
             }
+            if (swingT >= 0f && !slung)
+            {
+                // melee swing: a big sweep from right to left (or a full spin)
+                float k = Mathf.Clamp01(swingT / swingLen);
+                float e = 1f - (1f - k) * (1f - k);
+                if (swingSpin) wantRot = wantRot * Quaternion.Euler(0f, 0f, 360f * e);
+                else
+                {
+                    float yaw = Mathf.Lerp(70f, -80f, e);
+                    wantRot = wantRot * Quaternion.Euler(-25f * Mathf.Sin(k * Mathf.PI), yaw, 0f);
+                    wantPos += new Vector3(0f, 0.05f * Mathf.Sin(k * Mathf.PI), 0.12f * Mathf.Sin(k * Mathf.PI));
+                }
+            }
         }
         else if (hold == Hold.Flask)
         {
@@ -762,7 +883,7 @@ public class Scientist : MonoBehaviour
         }
         else { wantPos = gunRoot.localPosition; wantRot = gunRoot.localRotation; }
 
-        float follow = (aiming || throwT >= 0f || drinkT >= 0f) ? 22f : 12f;
+        float follow = swingT >= 0f ? 40f : (aiming || throwT >= 0f || drinkT >= 0f) ? 22f : 12f;
         gunPos = Vector3.Lerp(gunPos, wantPos, Mathf.Clamp01(dt * follow));
         gunRot = Quaternion.Slerp(gunRot, wantRot, Mathf.Clamp01(dt * follow));
         gunRoot.localPosition = gunPos;

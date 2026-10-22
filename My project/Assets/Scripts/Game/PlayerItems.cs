@@ -283,6 +283,7 @@ public partial class Player
     void FireGun(HeldItem h, GunDef g0, Vector3 from, float chargeMul = 1f)
     {
         GunDef g = Guns.Effective(g0, h.enchantDef, this);     // enchant + potions change the numbers
+        if (g.cycle) { g.element = CycleOrder[cycleIdx++ % CycleOrder.Length]; g.color = Items.ElementColor(g.element); }
         if (chargeMul != 1f) { g.damage *= chargeMul; g.blast *= Mathf.Lerp(1f, 1.4f, (chargeMul - 1f) / Mathf.Max(0.01f, g.chargeBonus)); g.size *= 1f + (chargeMul - 1f) * 0.2f; }
         float cd = g.cooldown;
         if (g.spinUp > 0f)
@@ -298,9 +299,151 @@ public partial class Player
         }
         else AddHeat(h, g.heat);
         if (g.burst > 1) { burstItem = h; burstLeft = g.burst - 1; burstAt = Time.time + g.burstGap; }
+        AttackExtras(h, g);                                   // lunges, blinks, boosts, walls, decoys, orbs...
+        if (g.mode == GunMode.Gadget) { Model.Kick(g.kick); Sfx.Play(g.sound, g.volume, g.pitch); return; }
+        if (g.mode == GunMode.Melee) { MeleeSwing(g); return; }
+        if (g.mode == GunMode.Wave) { WaveBlast(g); return; }
         if (g.strike > 0f) { CallStrike(g, from); return; }
         if (g.turret) { DeployTurret(g, from); return; }
         GunShot(h, g, from);
+    }
+
+    // ================================================================
+    // Melee, shockwaves and the extra things some weapons do when you attack
+    // ================================================================
+
+    static readonly Element[] CycleOrder = { Element.Fire, Element.Ice, Element.Poison, Element.Shock };
+    int cycleIdx;
+    static readonly System.Collections.Generic.Dictionary<ItemId, PotionDef> quickBuffs = new System.Collections.Generic.Dictionary<ItemId, PotionDef>();
+
+    // A shield is up when you hold right-click with a 'block' weapon.
+    public bool Blocking
+    {
+        get
+        {
+            HeldItem h = Held;
+            if (h == null || !Aiming || dead) return false;
+            GunDef g = Guns.Get(h.id);
+            return g != null && g.block;
+        }
+    }
+
+    Vector3 FlatAim => Quaternion.Euler(0f, GameCam.I.yaw, 0f) * Vector3.forward;
+
+    void AttackExtras(HeldItem h, GunDef g)
+    {
+        Vector3 fwd = FlatAim;
+        float yaw = GameCam.I.yaw;
+        if (g.lunge > 0f)
+        {
+            push += fwd * (g.lunge * 3.2f);
+            velocity.y = Mathf.Max(velocity.y, 2.5f);
+            Fx.Puff(transform.position + Vector3.up * 0.3f, new Color(1f, 1f, 1f, 0.35f), 4, 0.3f, 0.3f, 0.4f, -fwd);
+        }
+        if (g.blink > 0f) Blink(g.blink, g.color);
+        if (g.buffSpeed > 1f || g.buffDamage > 1f)
+        {
+            if (!quickBuffs.TryGetValue(g.id, out PotionDef pd))
+            {
+                pd = new PotionDef { id = g.id, time = 4f, speed = g.buffSpeed, dealt = g.buffDamage };
+                quickBuffs[g.id] = pd;
+            }
+            DrinkPotion(pd, h.R);
+        }
+        if (g.heal > 0f) { HealFrom(g.heal); Fx.Burst(Center, new Color(0.4f, 1f, 0.5f), 6, 2f, 0.07f, 0.5f, 2f); }
+        if (g.barrier) Barrier.Spawn(transform.position + fwd * 2.6f, yaw, g.fieldTime, g.color);
+        if (g.decoy) Decoy.Spawn(transform.position + fwd * 1.8f, yaw, Team, Mathf.Max(15f, g.damage), g.element, g.color, g.fieldTime);
+        if (g.healZone > 0f) HealZone.Spawn(transform.position, g.healZone, g.fieldTime, Team);
+        if (g.orbit > 0) Orbiters.Spawn(transform, g.orbit, g.fieldTime, Mathf.Max(4f, g.damage * 0.5f), Team, g.element, g.color);
+        if (g.reveal)
+        {
+            foreach (IDamageable d in GunToys.Near(Center, 30f, Team)) if (!(d is Laboratory)) Marks.Add(d, Mathf.Max(0.25f, g.mark));
+            Fx.Ring(Center, new Color(g.color.r, g.color.g, g.color.b, 0.5f), 30, 18f, 0.15f);
+            Sfx.Play("zone", 0.5f, 1.8f);
+        }
+    }
+
+    // Teleport a short way towards where you're aiming (stops before walls).
+    void Blink(float dist, Color c)
+    {
+        Vector3 dir = GameCam.I.transform.forward;
+        dir.y = Mathf.Max(dir.y, -0.2f);
+        dir.Normalize();
+        Vector3 from = Center;
+        Vector3 to = from + dir * dist;
+        if (Physics.SphereCast(from, 0.4f, dir, out RaycastHit hit, dist, Combat.NotPlayer, QueryTriggerInteraction.Ignore)) to = hit.point - dir * 0.7f;
+        Vector3 feet = to - Vector3.up * 1.1f;
+        float ground = MLGame.Ground(feet).y;
+        if (feet.y < ground) feet.y = ground + 0.05f;
+        Fx.Burst(from, c, 14, 4f, 0.1f, 0.4f, 0f);
+        cc.enabled = false;
+        transform.position = feet;
+        cc.enabled = true;
+        Fx.Burst(Center, c, 14, 4f, 0.1f, 0.4f, 0f);
+        Sfx.Play("zap", 0.5f, 1.6f);
+    }
+
+    // Swing at everything in front of you (or all around you).
+    void MeleeSwing(GunDef g)
+    {
+        Vector3 fwd = FlatAim;
+        Vector3 origin = Center;
+        Model.PlaySwing(g.arc >= 300f ? 0.45f : 0.28f, g.arc >= 300f);
+        var done = new System.Collections.Generic.HashSet<IDamageable>();
+        foreach (Collider col in Physics.OverlapSphere(origin + fwd * g.reach * 0.4f, g.reach + 0.6f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            IDamageable d = Combat.Find(col);
+            if (d == null || done.Contains(d) || !d.Alive || !Teams.Hostile(Team, d.Team)) continue;
+            Vector3 cp = Combat.Closest(col, origin);
+            Vector3 to = cp - origin;
+            to.y = 0f;
+            if (to.magnitude > g.reach + 0.5f) continue;
+            if (g.arc < 300f && to.sqrMagnitude > 0.01f && Vector3.Angle(fwd, to) > g.arc * 0.5f) continue;
+            done.Add(d);
+            Strike(d, g, g.damage, cp, to.sqrMagnitude > 0.01f ? to.normalized : fwd, g.element);
+            Fx.Burst(cp, g.color, 8, 4f, 0.08f, 0.3f);
+        }
+        // the swoosh
+        int n = 9;
+        for (int k = 0; k < n; k++)
+        {
+            float a = g.arc >= 300f ? k * 360f / n : -g.arc * 0.5f + g.arc * k / (n - 1);
+            Vector3 p = origin + Quaternion.Euler(0f, a, 0f) * fwd * (g.reach * 0.75f) + Vector3.up * Random.Range(-0.2f, 0.2f);
+            Fx.Burst(p, new Color(g.color.r, g.color.g, g.color.b, 0.8f), 1, 0.8f, 0.14f, 0.22f, 0f);
+        }
+        if (g.wave > 0f) Fx.Ring(transform.position + Vector3.up * 0.1f, g.color, 18, g.wave * 3f, 0.25f);
+        Model.Kick(g.kick);
+        GameCam.Kick(done.Count > 0 ? g.kick * 1.6f : g.kick * 0.6f);
+        Sfx.Play(g.sound, g.volume, g.pitch * Random.Range(0.92f, 1.08f));
+        if (done.Count > 0) Sfx.Play("hitmarker", 0.35f, 0.7f);
+    }
+
+    // A shockwave / gust / sound blast from where you stand (a cone in front, or a ring all around).
+    void WaveBlast(GunDef g)
+    {
+        Vector3 fwd = FlatAim;
+        Vector3 origin = Center;
+        float r = Mathf.Max(2f, g.wave);
+        Model.PlaySwing(g.arc >= 300f ? 0.45f : 0.3f, g.arc >= 300f);
+        foreach (IDamageable d in GunToys.Near(origin, r, Team))
+        {
+            if (d is Player) continue;
+            Vector3 to = d.Center - origin;
+            to.y = 0f;
+            if (g.arc < 300f && to.sqrMagnitude > 0.01f && Vector3.Angle(fwd, to) > g.arc * 0.5f) continue;
+            Strike(d, g, g.damage, d.Center, to.sqrMagnitude > 0.01f ? to.normalized : fwd, g.element);
+        }
+        if (g.arc >= 300f) Fx.Ring(origin - Vector3.up * 0.8f, new Color(g.color.r, g.color.g, g.color.b, 0.7f), 32, r * 3.2f, 0.3f);
+        else
+            for (int k = 0; k < 12; k++)
+            {
+                Vector3 dir = Quaternion.Euler(0f, Random.Range(-g.arc * 0.5f, g.arc * 0.5f), 0f) * fwd;
+                Fx.Puff(origin + dir * 0.8f, new Color(g.color.r, g.color.g, g.color.b, 0.4f), 1, 0.2f, 0.35f, 0.45f, dir * r * 2.2f);
+            }
+        Fx.Flash(origin, g.color, r * 2f, 2.5f, 0.15f);
+        GameCam.Shake(origin, 0.25f);
+        Model.Kick(g.kick);
+        Sfx.Play(g.sound, g.volume, g.pitch * Random.Range(0.94f, 1.06f));
     }
 
     // ---- magazines ----
@@ -365,7 +508,9 @@ public partial class Player
         GunDef g = Guns.Effective(g0, burstItem.enchantDef, this);
         burstLeft--;
         burstAt = Time.time + g.burstGap;
-        GunShot(burstItem, g, Model.Muzzle.position);
+        if (g.mode == GunMode.Melee) MeleeSwing(g);
+        else if (g.mode == GunMode.Wave) WaveBlast(g);
+        else if (g.mode != GunMode.Gadget) GunShot(burstItem, g, Model.Muzzle.position);
     }
 
     void GunShot(HeldItem h, GunDef g, Vector3 from)
@@ -428,7 +573,18 @@ public partial class Player
             damage *= 2f;
             Fx.Burst(point, new Color(1f, 0.95f, 0.4f), 8, 4f, 0.08f, 0.3f);
         }
-        d.TakeHit(MakeHit(g, damage, point, dir, el, dot));
+        damage *= Marks.Bonus(d);                         // marked targets take extra damage
+        Hit hit = MakeHit(g, damage, point, dir, el, dot);
+        if (g.pull != 0f && !dot)
+        {
+            // harpoons and hooks pull it towards you; big blasts shove it away
+            Vector3 toMe = Center - d.Center;
+            toMe.y = 0f;
+            hit.dir = (g.pull > 0f ? toMe : -toMe).normalized;
+            hit.force = Mathf.Abs(g.pull);
+        }
+        d.TakeHit(hit);
+        if (g.mark > 0f && !dot) Marks.Add(d, g.mark);
         if (g.lifesteal > 0f && !(d is Laboratory)) HealFrom(damage * g.lifesteal);
         if (g.hitBlast > 0f && !dot) Combat.MiniBlast(point - dir * 0.2f, g.hitBlast, damage * 0.5f, Team, el, g.structure, true, g.color);
     }

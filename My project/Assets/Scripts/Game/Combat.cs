@@ -388,10 +388,11 @@ public class Projectile : MonoBehaviour
                 {
                     if (target != null && Teams.Hostile(team, target.Team))
                     {
-                        float dmg = damage;
+                        float dmg = damage * Marks.Bonus(target);
                         if (gun.crit > 0f && Random.value < gun.crit) { dmg *= 2f; Fx.Burst(point, new Color(1f, 0.95f, 0.4f), 8, 4f, 0.08f, 0.3f); }
                         target.TakeHit(new Hit { damage = dmg, point = point, dir = vel.normalized, force = gun.force, element = element, team = team, structureMul = gun.structure, fromPlayer = fromPlayer });
                         if (fromPlayer && gun.lifesteal > 0f && !(target is Laboratory) && Player.Local != null) Player.Local.HealFrom(dmg * gun.lifesteal);
+                        if (gun.mark > 0f) Marks.Add(target, gun.mark);
                     }
                     if (gun.hitBlast > 0f) Combat.MiniBlast(point + normal * 0.2f, gun.hitBlast, damage * 0.5f, team, element, gun.structure, fromPlayer, color);
                     Fx.Burst(point, color, 8, 3f, gun.size * 0.5f, 0.35f);

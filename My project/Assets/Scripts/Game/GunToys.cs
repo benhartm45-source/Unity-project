@@ -195,3 +195,185 @@ public class MiniTurret : MonoBehaviour
         Sfx.At("turret", from, 0.4f, 1.4f);
     }
 }
+
+// ================================================================
+// MORE THINGS WEAPONS MAKE (the big weapon list): marks, walls, decoys, heal circles, orbiting orbs
+// ================================================================
+
+// MARKED targets take extra damage for a while (spotter scopes, "marks the target", reveal pulses...).
+public static class Marks
+{
+    class Mark { public float until, bonus; }
+    static readonly Dictionary<IDamageable, Mark> marks = new Dictionary<IDamageable, Mark>();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics() => marks.Clear();
+
+    public static void Add(IDamageable d, float bonus, float time = 6f)
+    {
+        if (d == null || bonus <= 0f) return;
+        if (marks.TryGetValue(d, out Mark m)) { m.until = Mathf.Max(m.until, Time.time + time); m.bonus = Mathf.Max(m.bonus, bonus); }
+        else marks[d] = new Mark { until = Time.time + time, bonus = bonus };
+        Fx.Ring(d.Center + Vector3.up * 0.9f, new Color(1f, 0.3f, 0.3f, 0.8f), 10, 2f, 0.08f);
+    }
+
+    // Damage multiplier for hitting this target (1 = not marked).
+    public static float Bonus(IDamageable d)
+    {
+        if (d == null || !marks.TryGetValue(d, out Mark m)) return 1f;
+        if (Time.time > m.until || !d.Alive) { marks.Remove(d); return 1f; }
+        if (Random.value < 0.3f) Fx.Burst(d.Center + Vector3.up * 1.1f, new Color(1f, 0.25f, 0.25f), 1, 0.5f, 0.08f, 0.3f, 0f);
+        return 1f + m.bonus;
+    }
+}
+
+// A wall that pops up in front of you and blocks shots (and people) for a while.
+public class Barrier : MonoBehaviour
+{
+    float life, total;
+    Material mat;
+    Color color;
+
+    public static void Spawn(Vector3 pos, float yaw, float time, Color c)
+    {
+        var go = new GameObject("Barrier");
+        go.transform.position = GunToys.Ground(pos);
+        go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        var b = go.AddComponent<Barrier>();
+        b.life = b.total = Mathf.Max(2f, time);
+        b.color = c;
+        b.mat = Gfx.Clear(new Color(c.r, c.g, c.b, 0.45f));
+        GameObject wall = Gfx.Part(go.transform, PrimitiveType.Cube, new Vector3(0f, 1.3f, 0f), new Vector3(3.4f, 2.6f, 0.3f), b.mat, default, false);
+        wall.AddComponent<BoxCollider>();
+        Gfx.Part(go.transform, PrimitiveType.Cube, new Vector3(0f, 2.62f, 0f), new Vector3(3.5f, 0.08f, 0.34f), Gfx.Glow(c, 2f), default, false);
+        Gfx.Part(go.transform, PrimitiveType.Cube, new Vector3(0f, 0.04f, 0f), new Vector3(3.5f, 0.08f, 0.34f), Gfx.Glow(c, 2f), default, false);
+        Sfx.At("shield_hit", go.transform.position, 0.6f, 1.3f);
+        Fx.Burst(go.transform.position + Vector3.up, c, 20, 4f, 0.1f, 0.5f, 0f);
+    }
+
+    void Update()
+    {
+        life -= Time.deltaTime;
+        if (mat != null) mat.color = new Color(color.r, color.g, color.b, 0.25f + 0.2f * Mathf.Clamp01(life / 1f) + 0.05f * Mathf.Sin(Time.time * 6f));
+        if (life <= 0f)
+        {
+            Fx.Burst(transform.position + Vector3.up * 1.3f, color, 16, 3f, 0.1f, 0.4f);
+            Destroy(gameObject);
+        }
+    }
+}
+
+// A fake scientist that stands there... and then explodes.
+public class Decoy : MonoBehaviour
+{
+    float life;
+    int team;
+    float damage;
+    Element element;
+    Color color;
+
+    public static void Spawn(Vector3 pos, float yaw, int team, float damage, Element element, Color c, float time)
+    {
+        var go = new GameObject("Decoy");
+        go.transform.position = GunToys.Ground(pos);
+        go.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+        var d = go.AddComponent<Decoy>();
+        d.life = Mathf.Max(1.5f, time);
+        d.team = team; d.damage = damage; d.element = element; d.color = c;
+        Scientist s = Scientist.Create(go.transform, c, Random.Range(0, 99));
+        s.aimYaw = yaw;
+        Fx.Puff(go.transform.position + Vector3.up, new Color(c.r, c.g, c.b, 0.5f), 10, 0.6f, 0.6f, 0.8f, Vector3.up * 0.5f);
+        Sfx.At("pop", go.transform.position, 0.6f, 0.8f);
+    }
+
+    void Update()
+    {
+        life -= Time.deltaTime;
+        if (life < 1f && Random.value < 0.4f) Fx.Burst(transform.position + Vector3.up, color, 2, 2f, 0.08f, 0.3f, 0f);
+        if (life <= 0f)
+        {
+            Combat.Blast(transform.position + Vector3.up, 3.2f, damage, 7f, team, element, 1.5f, true, color);
+            Destroy(gameObject);
+        }
+    }
+}
+
+// A glowing circle that heals the player who made it while they stand in it.
+public class HealZone : MonoBehaviour
+{
+    float life, radius;
+    int team;
+
+    public static void Spawn(Vector3 pos, float radius, float time, int team)
+    {
+        var go = new GameObject("Heal Zone");
+        go.transform.position = GunToys.Ground(pos) + Vector3.up * 0.05f;
+        var z = go.AddComponent<HealZone>();
+        z.life = Mathf.Max(2f, time); z.radius = radius; z.team = team;
+        Color c = new Color(0.4f, 1f, 0.5f);
+        Gfx.Part(go.transform, PrimitiveType.Cylinder, Vector3.zero, new Vector3(radius * 2f, 0.02f, radius * 2f), Gfx.Clear(new Color(c.r, c.g, c.b, 0.3f)), default, false);
+        Gfx.Part(go.transform, PrimitiveType.Cylinder, Vector3.up * 0.01f, new Vector3(radius * 0.6f, 0.02f, radius * 0.6f), Gfx.Glow(c, 1.5f), default, false);
+        Gfx.SetLayer(go, 2);
+        Sfx.At("potion_ready", go.transform.position, 0.6f, 1.2f);
+    }
+
+    void Update()
+    {
+        float dt = Time.deltaTime;
+        life -= dt;
+        Player p = Player.Local;
+        if (p != null && p.Alive && p.Team == team)
+        {
+            Vector3 d = p.transform.position - transform.position;
+            if (new Vector2(d.x, d.z).magnitude < radius && Mathf.Abs(d.y) < 2f) p.HealFrom(9f * dt);
+        }
+        if (Random.value < 0.3f) Fx.Burst(transform.position + new Vector3(Random.Range(-radius, radius) * 0.7f, 0.1f, Random.Range(-radius, radius) * 0.7f), new Color(0.5f, 1f, 0.6f), 1, 1f, 0.07f, 0.8f, 2f);
+        if (life <= 0f) Destroy(gameObject);
+    }
+}
+
+// Glowing orbs that circle around you and hurt enemies they touch.
+public class Orbiters : MonoBehaviour
+{
+    readonly List<Transform> orbs = new List<Transform>();
+    Transform owner;
+    float life, damage, angle, hitCd;
+    int team;
+    Element element;
+    Color color;
+
+    public static void Spawn(Transform owner, int count, float time, float damage, int team, Element element, Color c)
+    {
+        var go = new GameObject("Orbiters");
+        var o = go.AddComponent<Orbiters>();
+        o.owner = owner; o.life = Mathf.Max(3f, time); o.damage = damage; o.team = team; o.element = element; o.color = c;
+        for (int i = 0; i < Mathf.Clamp(count, 1, 8); i++)
+            o.orbs.Add(Gfx.Part(go.transform, PrimitiveType.Sphere, Vector3.zero, Vector3.one * 0.3f, Gfx.Glow(c, 3f), default, false).transform);
+        Gfx.SetLayer(go, 2);
+        Sfx.Play("potion_ready", 0.5f, 1.5f);
+    }
+
+    void Update()
+    {
+        float dt = Time.deltaTime;
+        life -= dt;
+        if (owner == null || life <= 0f) { Destroy(gameObject); return; }
+        angle += dt * 220f;
+        Vector3 c = owner.position + Vector3.up * 1.1f;
+        for (int i = 0; i < orbs.Count; i++)
+        {
+            float a = (angle + i * 360f / orbs.Count) * Mathf.Deg2Rad;
+            orbs[i].position = c + new Vector3(Mathf.Cos(a), Mathf.Sin(a * 2f) * 0.15f, Mathf.Sin(a)) * 1.7f;
+        }
+        hitCd -= dt;
+        if (hitCd > 0f) return;
+        hitCd = 0.25f;
+        foreach (Transform orb in orbs)
+            foreach (IDamageable d in GunToys.Near(orb.position, 0.9f, team))
+            {
+                if (d is Player) continue;
+                d.TakeHit(new Hit { damage = damage, point = orb.position, dir = (d.Center - c).normalized, force = 1.5f, element = element, team = team, structureMul = 1f, fromPlayer = true });
+                Fx.Burst(orb.position, color, 5, 2f, 0.06f, 0.25f);
+            }
+    }
+}

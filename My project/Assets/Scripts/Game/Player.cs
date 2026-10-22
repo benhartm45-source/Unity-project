@@ -293,10 +293,16 @@ public partial class Player : MonoBehaviour, IDamageable
     public void TakeHit(Hit h)
     {
         if (dead || !MLGame.Playing) return;
-        NoteAttacker(h);                        // who hit us last gets the credit (PlayerDeath.cs)
         float dmg = h.damage;
         if (ironLeft > 0f) dmg *= 0.5f;
         dmg *= DamageTakenMul;                  // armour and potions
+        if (Blocking && !h.dot && Vector3.Dot(h.dir, Model.transform.forward) < 0.3f)
+        {
+            // shield up and the hit came from the front
+            dmg *= 0.25f;
+            Fx.Burst(h.point != Vector3.zero ? h.point : Center + Model.transform.forward * 0.6f, new Color(0.7f, 0.9f, 1f), 10, 4f, 0.08f, 0.3f);
+            Sfx.Play("shield_hit", 0.6f, Random.Range(1.1f, 1.3f));
+        }
         if (armor > 0f && !h.dot)
         {
             float soak = Mathf.Min(armor, dmg * 0.7f);
@@ -333,7 +339,6 @@ public partial class Player : MonoBehaviour, IDamageable
         CancelUse();
         DropBackpack();
         bool canRespawn = MyLab != null && !MyLab.Destroyed;
-        OnKnockedOut(canRespawn);               // lose your gun, get some materials back, tell everyone (PlayerDeath.cs)
         RespawnAt = canRespawn ? Time.time + 6f : -1f;
         GameHUD.Toast(canRespawn ? "You got knocked out! Your lab will patch you up..." : "ELIMINATED - your lab is gone, so there's no coming back.", new Color(1f, 0.35f, 0.3f));
         MLGame.I?.PlayerDied(canRespawn);
