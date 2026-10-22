@@ -1925,6 +1925,10 @@ public class HeldItem
     public float heat;          // weapons overheat if you fire non-stop
     public bool overheated;
     public float cooldown;
+    public int ammo = -1;           // magazine guns: bullets left (-1 = full, not used yet)
+    public float reloadLeft;        // seconds of reloading left
+    public float chargeT;           // charge guns: how long it's been charged
+    public float spin;              // miniguns: 0 = stopped, 1 = full speed
     public Recipe R => Items.Get(id);
     public bool Enchanted => enchantDef != null || enchant != Element.None;
     public Color EnchantColor => enchantDef != null ? enchantDef.color : Items.ElementColor(enchant);

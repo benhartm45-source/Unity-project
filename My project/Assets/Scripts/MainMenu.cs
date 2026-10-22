@@ -72,8 +72,7 @@ public class MainMenu : MonoBehaviour
     {
         Settings.Apply();
         openedAt = Time.unscaledTime;
-        bubbles = new Bubble[40];
-        for (int i = 0; i < bubbles.Length; i++) bubbles[i] = NewBubble(Random.value);
+        MakeBubbles();
         // a plain dark camera background (the menu draws over everything anyway)
         Camera cam = Camera.main;
         if (cam != null && !MLGame.ArenaPresent)
@@ -96,6 +95,12 @@ public class MainMenu : MonoBehaviour
         };
     }
 
+    void MakeBubbles()
+    {
+        bubbles = new Bubble[40];
+        for (int i = 0; i < bubbles.Length; i++) bubbles[i] = NewBubble(Random.value);
+    }
+
     // ---------- Input (keyboard + controller) ----------
 
     void Update()
@@ -103,6 +108,7 @@ public class MainMenu : MonoBehaviour
         if (MLGame.Playing || LoadingScreen.Active) { if (GUIUtility.keyboardControl != 0) GUIUtility.keyboardControl = 0; return; }   // hidden while you play
         float dt = Time.unscaledDeltaTime;
         mouseMoved = Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > 0.5f;
+        if (bubbles == null) MakeBubbles();     // (lost if scripts recompile while playing)
         for (int i = 0; i < bubbles.Length; i++)
         {
             bubbles[i].y -= bubbles[i].speed * dt;
@@ -397,6 +403,7 @@ public class MainMenu : MonoBehaviour
         for (float x = (Time.unscaledTime * 6f * S) % step; x < sw; x += step) Fill(new Rect(x, 0f, 1f, sh), line);
         for (float y = 0f; y < sh; y += step) Fill(new Rect(0f, y, sw, 1f), line);
         // glowing bubbles floating up
+        if (bubbles == null) MakeBubbles();
         foreach (Bubble b in bubbles)
         {
             float x = (b.x + Mathf.Sin(Time.unscaledTime * 0.8f + b.wobble) * 0.008f) * sw;

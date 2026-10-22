@@ -149,6 +149,30 @@ public partial class Player
         healRate = healRateLeft = 0f;
     }
 
+    // Teleport gun: blink to a spot.
+    public void TeleportTo(Vector3 pos)
+    {
+        Fx.Burst(Center, new Color(0.85f, 0.7f, 1f), 18, 4f, 0.1f, 0.5f);
+        cc.enabled = false;
+        transform.position = pos;
+        cc.enabled = true;
+        velocity = Vector3.zero;
+        push = Vector3.zero;
+        Fx.Burst(Center, new Color(0.85f, 0.7f, 1f), 24, 5f, 0.1f, 0.6f);
+        Sfx.Play("respawn", 0.6f, 1.4f);
+    }
+
+    // Grappling hook: yank yourself towards a point.
+    public void GrappleTo(Vector3 point)
+    {
+        Vector3 to = point - transform.position;
+        float d = to.magnitude;
+        if (d < 1.5f) return;
+        push += to.normalized * Mathf.Min(30f, 8f + d * 1.1f);
+        velocity.y = Mathf.Max(velocity.y, 5f + Mathf.Max(0f, to.y) * 0.7f);
+        Sfx.Play("throw", 0.6f, 0.7f);
+    }
+
     // Life steal and the like.
     public void HealFrom(float amount)
     {

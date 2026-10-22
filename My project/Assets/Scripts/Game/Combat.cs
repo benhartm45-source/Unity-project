@@ -176,6 +176,14 @@ public class Projectile : MonoBehaviour
     Transform look;
     float trailT;
     GunDef gun;                 // Kind.Gun: which gun fired it (blast, puddle, structure damage...)
+    // special mechanics (see Guns.cs)
+    int bouncesLeft;
+    float traveled, age, homeCd, fuse;
+    bool returning, stuck;
+    IDamageable homeTarget;
+    Transform stuckTo;
+    Vector3 stuckLocal;
+    HashSet<IDamageable> boomHit;
     Element element;            // what it does on hit (the gun's own element, or the enchant)
 
     // A shot from one of the table guns (Guns.cs).
@@ -186,6 +194,8 @@ public class Projectile : MonoBehaviour
         var p = go.AddComponent<Projectile>();
         p.kind = Kind.Gun;
         p.gun = g;
+        p.bouncesLeft = g.bounces;
+        if (g.boomerang) { p.boomHit = new HashSet<IDamageable>(); }
         p.vel = vel;
         p.team = team;
         p.ench = element;
@@ -194,8 +204,9 @@ public class Projectile : MonoBehaviour
         p.life = g.life;
         p.damage = g.damage;
         p.radius = Mathf.Max(0.08f, g.size * 0.6f);
-        p.gravity = g.gravity;
+        p.gravity = g.boomerang ? 0f : g.gravity;
         p.color = color;
+        if (g.boomerang) p.life = Mathf.Max(p.life, 3.5f);
         if (g.star)
         {
             p.look = Gfx.Part(go.transform, PrimitiveType.Cube, Vector3.zero, Vector3.one * g.size, Gfx.Glow(color, 4f), new Vector3(45f, 0f, 45f), false).transform;
@@ -267,13 +278,36 @@ public class Projectile : MonoBehaviour
     {
         float dt = Time.deltaTime;
         life -= dt;
-        if (life <= 0f) { Impact(transform.position, Vector3.up, null); return; }
+        age += dt;
+        if (kind == Kind.Gun && stuck)
+        {
+            // stuck to something, waiting to go off (blinking faster and faster)
+            if (stuckTo != null) transform.position = stuckTo.TransformPoint(stuckLocal);
+            fuse -= dt;
+            if (look != null) look.gameObject.SetActive(Mathf.Repeat(fuse * (fuse < 1f ? 10f : 4f), 1f) > 0.35f);
+            if (fuse <= 0f) Impact(transform.position, Vector3.up, null);
+            return;
+        }
+        if (life <= 0f)
+        {
+            if (kind == Kind.Gun && gun.boomerang) { Destroy(gameObject); return; }
+            Impact(transform.position, Vector3.up, null);
+            return;
+        }
+        if (kind == Kind.Gun)
+        {
+            if (gun.homing > 0f) Home(dt);
+            if (gun.boomerang) Boomerang(dt);
+            if (gun.flak > 0f && traveled >= gun.flak) { Fx.Flash(transform.position, color, 6f, 4f, 0.1f); Impact(transform.position, -vel.normalized, null); return; }
+            if (look != null && gun.boomerang) look.Rotate(0f, 0f, 1080f * dt, Space.Self);
+        }
         Vector3 prev = transform.position;
         vel.y += gravity * dt;
         Vector3 next = prev + vel * dt;
         Vector3 step = next - prev;
         float dist = step.magnitude;
         if (dist < 1e-5f) return;
+        traveled += dist;
 
         // forcefields stop shots from outside
         if (Laboratory.ShieldBlocks(prev, next, team, out Vector3 sp, out Laboratory lab))
@@ -285,14 +319,15 @@ public class Projectile : MonoBehaviour
         }
         // the player (who's on a layer shots don't normally see)
         Player pl = Player.Local;
-        if (pl != null && pl.Alive && pl.Team != team && pl.SegmentHits(prev, next, radius + 0.1f))
+        if (pl != null && pl.Alive && pl.Team != team && pl.SegmentHits(prev, next, radius + 0.1f) && !(kind == Kind.Gun && gun.boomerang && boomHit.Contains(pl)))
         {
-            Impact(pl.Center, -step.normalized, pl);
-            return;
+            if (kind == Kind.Gun && gun.boomerang) { boomHit.Add(pl); pl.TakeHit(new Hit { damage = damage, point = pl.Center, dir = step.normalized, force = gun.force, element = element, team = team, structureMul = 1f, fromPlayer = fromPlayer }); }
+            else { Impact(pl.Center, -step.normalized, pl); return; }
         }
         if (Physics.SphereCast(prev, radius, step / dist, out RaycastHit hit, dist, Combat.NotPlayer, QueryTriggerInteraction.Ignore))
         {
             IDamageable d = Combat.Find(hit.collider);
+            if (kind == Kind.Gun && GunHit(hit, d, next)) return;      // bounced / stuck / went through
             if (d != null && !Teams.Hostile(team, d.Team) && d.Team != Teams.Neutral && kind != Kind.Toxic)
             {
                 // hit your own lab's wall: just fizzles out, no damage
@@ -363,6 +398,7 @@ public class Projectile : MonoBehaviour
                     if (gun.element == Element.Slime || gun.puddle) Sfx.At("slime_splat", point, 0.4f, 1.3f);
                     if (gun.puddle) SlimePuddle.Spawn(point, team);
                 }
+                GunAfterImpact(point, normal);
                 break;
             default:
                 if (target != null && Teams.Hostile(team, target.Team))
@@ -371,6 +407,126 @@ public class Projectile : MonoBehaviour
                 break;
         }
         Destroy(gameObject);
+    }
+
+    // ---------------- special mechanics for table guns ----------------
+
+    // Hit something solid. Returns true if the shot keeps going (or sticks) instead of going off.
+    bool GunHit(RaycastHit hit, IDamageable d, Vector3 next)
+    {
+        bool hostile = d != null && d.Alive && Teams.Hostile(team, d.Team);
+        if (gun.boomerang)
+        {
+            if (hostile)
+            {
+                if (!boomHit.Contains(d))
+                {
+                    boomHit.Add(d);
+                    d.TakeHit(new Hit { damage = damage, point = hit.point, dir = vel.normalized, force = gun.force, element = element, team = team, structureMul = gun.structure, fromPlayer = fromPlayer });
+                    Fx.Burst(hit.point, color, 8, 3f, 0.08f, 0.3f);
+                    Sfx.At("hitmarker", hit.point, 0.5f, 0.8f);
+                }
+                transform.position = next;        // straight through
+                return true;
+            }
+            if (!returning) { returning = true; vel = Vector3.Reflect(vel, hit.normal); }
+            transform.position = hit.point + hit.normal * (radius + 0.05f);
+            return true;
+        }
+        if (gun.stick > 0f && !hostile)
+        {
+            Stick(hit);
+            return true;
+        }
+        if (gun.stick > 0f && hostile)
+        {
+            Stick(hit);
+            return true;
+        }
+        if (!hostile && bouncesLeft > 0 && d == null)
+        {
+            bouncesLeft--;
+            vel = Vector3.Reflect(vel, hit.normal) * 0.8f;
+            transform.position = hit.point + hit.normal * (radius + 0.05f);
+            Fx.Burst(hit.point, color, 4, 2f, 0.05f, 0.2f);
+            Sfx.At("pop", hit.point, 0.35f, Random.Range(1.3f, 1.6f));
+            return true;
+        }
+        return false;
+    }
+
+    void Stick(RaycastHit hit)
+    {
+        stuck = true;
+        fuse = gun.stick;
+        stuckTo = hit.collider != null ? hit.collider.transform : null;
+        Vector3 at = hit.point + hit.normal * 0.05f;
+        if (stuckTo != null) stuckLocal = stuckTo.InverseTransformPoint(at);
+        transform.position = at;
+        vel = Vector3.zero;
+        Sfx.At("slime_splat", at, 0.5f, 1.5f);
+    }
+
+    // Homing: steer towards the closest enemy in front.
+    void Home(float dt)
+    {
+        homeCd -= dt;
+        if (homeCd <= 0f)
+        {
+            homeCd = 0.15f;
+            homeTarget = null;
+            float best = 999f;
+            Vector3 fwd = vel.sqrMagnitude > 0.01f ? vel.normalized : transform.forward;
+            foreach (IDamageable d in GunToys.Near(transform.position, 35f, team))
+            {
+                if (d is Laboratory && MLGame.ShieldsUp) continue;
+                Vector3 to = d.Center - transform.position;
+                if (Vector3.Angle(fwd, to) > 70f) continue;
+                float score = to.magnitude;
+                if (score < best) { best = score; homeTarget = d; }
+            }
+        }
+        if (homeTarget == null || !homeTarget.Alive) return;
+        float speed = vel.magnitude;
+        Vector3 want = (homeTarget.Center - transform.position).normalized * speed;
+        vel = Vector3.RotateTowards(vel, want, gun.homing * Mathf.Deg2Rad * dt, 0f);
+    }
+
+    // Boomerang: out... and back.
+    void Boomerang(float dt)
+    {
+        if (!returning && age > 0.55f) returning = true;
+        if (!returning) return;
+        Vector3 home = fromPlayer && Player.Local != null ? Player.Local.Center : transform.position;
+        Vector3 to = home - transform.position;
+        if (to.magnitude < 1.3f) { Sfx.Play("pop", 0.4f, 0.7f); Destroy(gameObject); return; }
+        float speed = Mathf.Max(18f, gun.speed);
+        vel = Vector3.RotateTowards(vel, to.normalized * speed, 8f * dt, 60f * dt);
+    }
+
+    // After going off: mini bombs, a damaging patch, teleporting you there.
+    void GunAfterImpact(Vector3 point, Vector3 normal)
+    {
+        if (gun.cluster > 0 && gun.blast > 0f)
+        {
+            GunDef b = gun.Clone();
+            b.cluster = 0; b.field = 0f; b.flak = 0f; b.homing = 0f; b.stick = 0f; b.teleport = false; b.boomerang = false;
+            b.blast = gun.blast * 0.55f;
+            b.damage = damage * 0.35f;
+            b.size = Mathf.Max(0.1f, gun.size * 0.55f);
+            b.gravity = -15f;
+            b.bounces = 1;
+            b.life = 2.5f;
+            for (int i = 0; i < gun.cluster; i++)
+            {
+                Vector3 v = Random.insideUnitSphere * 6f + Vector3.up * 8f;
+                FireGun(b, point + normal * 0.5f + Vector3.up * 0.3f, v, team, element, color, fromPlayer);
+            }
+        }
+        if (gun.field > 0f)
+            DamageField.Spawn(point, gun.field, gun.fieldTime, damage * 0.35f + 4f, element, color, team, fromPlayer, gun.structure, gun.blackHole);
+        if (gun.teleport && fromPlayer && Player.Local != null && Player.Local.Alive)
+            Player.Local.TeleportTo(point + normal * 0.6f);
     }
 }
 

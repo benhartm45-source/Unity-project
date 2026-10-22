@@ -93,6 +93,18 @@ public partial class Player
         {
             if (it == null) continue;
             it.cooldown = Mathf.Max(0f, it.cooldown - dt);
+            if (it.reloadLeft > 0f)
+            {
+                it.reloadLeft -= dt;
+                if (it.reloadLeft <= 0f)
+                {
+                    GunDef rg = Guns.Get(it.id);
+                    it.ammo = rg != null ? rg.mag : 0;
+                    it.reloadLeft = 0f;
+                    if (it == Held) Sfx.Play("craft_done", 0.35f, 1.6f);
+                }
+            }
+            if (!(Firing && it == Held)) it.spin = Mathf.MoveTowards(it.spin, 0f, dt * 1.2f);
             float cool = (it.overheated ? 45f : 32f) * CoolMul;
             if (!(Firing && it == Held)) it.heat = Mathf.Max(0f, it.heat - cool * dt);
             if (it.overheated && it.heat <= 25f) it.overheated = false;
@@ -105,6 +117,8 @@ public partial class Player
                 Key[] keys = { Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5, Key.Digit6, Key.Digit7, Key.Digit8 };
                 for (int i = 0; i < SlotCount; i++) if (K[keys[i]].wasPressedThisFrame) Select(i);
                 if (K.qKey.wasPressedThisFrame) QuickHeal();
+                if (K.rKey.wasPressedThisFrame && Held != null) StartReload(Held, Guns.Get(Held.id));
+                if (K.iKey.wasPressedThisFrame) GameHUD.ToggleWeaponInfo();
                 if (K.vKey.wasPressedThisFrame)
                 {
                     Settings.FirstPerson = !Settings.FirstPerson;
@@ -136,7 +150,9 @@ public partial class Player
         if (h != null && control && !Model.Busy && !Working && gatherNode == null)
         {
             ItemKind kind = h.R.kind;
-            if (kind == ItemKind.Weapon && firePressed) Firing = FireWeapon(h, fireDown);
+            GunDef hg = kind == ItemKind.Weapon ? Guns.Get(h.id) : null;
+            if (hg != null && hg.charge > 0f) Firing = ChargeWeapon(h, hg, firePressed);
+            else if (kind == ItemKind.Weapon && firePressed) Firing = FireWeapon(h, fireDown);
             else if (kind == ItemKind.Potion && fireDown) StartDrink(h);
             else if (kind == ItemKind.Throwable && fireDown) StartThrow(h);
         }
@@ -197,6 +213,12 @@ public partial class Player
             return false;
         }
         GunDef gun = Guns.Get(h.id);
+        if (gun != null && gun.mag > 0)
+        {
+            if (h.ammo < 0) h.ammo = gun.mag;
+            if (h.reloadLeft > 0f) return false;
+            if (h.ammo <= 0) { StartReload(h, gun); if (fireDown) Sfx.Play("overheat_click", 0.5f); return false; }
+        }
         if (h.cooldown > 0f) return h.id == ItemId.FreezeRay || (gun != null && gun.mode == GunMode.Beam);
         if (gun != null && !gun.auto && !fireDown) return false;          // click for every shot
         Transform muzzle = Model.Muzzle;
@@ -258,13 +280,79 @@ public partial class Player
     float burstAt, beamSfxCd;
     int beamTick;
 
-    void FireGun(HeldItem h, GunDef g0, Vector3 from)
+    void FireGun(HeldItem h, GunDef g0, Vector3 from, float chargeMul = 1f)
     {
         GunDef g = Guns.Effective(g0, h.enchantDef, this);     // enchant + potions change the numbers
-        h.cooldown = g.cooldown;
-        AddHeat(h, g.heat);
+        if (chargeMul != 1f) { g.damage *= chargeMul; g.blast *= Mathf.Lerp(1f, 1.4f, (chargeMul - 1f) / Mathf.Max(0.01f, g.chargeBonus)); g.size *= 1f + (chargeMul - 1f) * 0.2f; }
+        float cd = g.cooldown;
+        if (g.spinUp > 0f)
+        {
+            cd *= Mathf.Lerp(3f, 1f, h.spin);              // minigun: starts slow, spins up
+            h.spin = Mathf.Min(1f, h.spin + Mathf.Max(0.03f, cd) / g.spinUp);
+        }
+        h.cooldown = cd;
+        if (g.mag > 0)
+        {
+            h.ammo--;
+            if (h.ammo <= 0) StartReload(h, g0);
+        }
+        else AddHeat(h, g.heat);
         if (g.burst > 1) { burstItem = h; burstLeft = g.burst - 1; burstAt = Time.time + g.burstGap; }
+        if (g.strike > 0f) { CallStrike(g, from); return; }
+        if (g.turret) { DeployTurret(g, from); return; }
         GunShot(h, g, from);
+    }
+
+    // ---- magazines ----
+    public void StartReload(HeldItem h, GunDef g)
+    {
+        if (h == null || g == null || g.mag <= 0 || h.reloadLeft > 0f) return;
+        if (h.ammo < 0 || h.ammo >= g.mag) return;      // already full
+        h.reloadLeft = g.reload;
+        Sfx.Play("tinker", 0.6f, 1.3f);
+    }
+
+    // ---- charge shots: hold to charge, let go to fire ----
+    bool ChargeWeapon(HeldItem h, GunDef g, bool held)
+    {
+        if (h.overheated || h.reloadLeft > 0f || Model.Muzzle == null) { h.chargeT = 0f; return false; }
+        if (held && h.cooldown <= 0f)
+        {
+            float before = h.chargeT;
+            h.chargeT = Mathf.Min(g.charge, h.chargeT + Time.deltaTime);
+            if (h.chargeT >= g.charge && before < g.charge) Sfx.Play("potion_ready", 0.4f, 1.6f);
+            if (Random.value < 0.5f) Fx.Burst(Model.Muzzle.position, g.color, 1, 1.5f * h.chargeT / g.charge, 0.05f + 0.08f * h.chargeT / g.charge, 0.2f, 0f);
+            return true;
+        }
+        if (!held && h.chargeT > 0f)
+        {
+            float k = h.chargeT / g.charge;
+            h.chargeT = 0f;
+            if (k < 0.15f) return false;                     // just a tap: nothing
+            FireGun(h, g, Model.Muzzle.position, 1f + g.chargeBonus * k);
+            return true;
+        }
+        return false;
+    }
+
+    // ---- airstrike: mark the spot you're aiming at ----
+    void CallStrike(GunDef g, Vector3 from)
+    {
+        Vector3 at = GameCam.I.AimPoint(Mathf.Max(30f, g.range));
+        StrikeMarker.Spawn(at, g.strike, g.damage, Mathf.Max(3f, g.blast), g.element, g.color, Team, true, g.structure);
+        Fx.Beam(from, at, new Color(g.color.r, g.color.g, g.color.b, 0.5f), 0.03f, 0.15f, false);
+        Model.Kick(g.kick);
+        Sfx.Play(g.sound, g.volume, g.pitch);
+    }
+
+    // ---- turret gun: throw down a mini turret in front of you ----
+    void DeployTurret(GunDef g, Vector3 from)
+    {
+        Vector3 fwd = Quaternion.Euler(0f, GameCam.I.yaw, 0f) * Vector3.forward;
+        Vector3 at = transform.position + fwd * 2.2f;
+        MiniTurret.Spawn(at, GameCam.I.yaw, Team, Mathf.Max(4f, g.damage), g.element, g.color, g.fieldTime > 0f ? g.fieldTime : 15f);
+        Model.Kick(g.kick);
+        Sfx.Play("throw", 0.6f);
     }
 
     // Burst guns: the rest of the burst comes out a moment later.
@@ -306,6 +394,12 @@ public partial class Player
         Model.Kick(g.kick);
         GameCam.Kick(g.kick * 1.4f);
         if (g.force > 3f && g.mode != GunMode.Beam) push -= dir * g.kick;
+        if (g.selfKnock > 0f)
+        {
+            // recoil jump: aim at the ground and fire to fly
+            push -= dir * g.selfKnock;
+            if (dir.y < -0.3f) velocity.y = Mathf.Max(velocity.y, g.selfKnock * -dir.y);
+        }
         if (g.mode == GunMode.Beam && g.id == ItemId.FreezeRay)
         {
             if (beamLoop == null) beamLoop = Sfx.Loop("freeze_loop", transform, 0.5f, 25f);
@@ -353,7 +447,7 @@ public partial class Player
         float len = Vector3.Distance(from, end);
         IDamageable first = null;
         Vector3 firstPoint = to;
-        if (g.pierce)
+        if (g.pierce || g.wallPierce)
         {
             RaycastHit[] hits = Physics.RaycastAll(from, dir, len, Combat.NotPlayer, QueryTriggerInteraction.Ignore);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
@@ -362,7 +456,11 @@ public partial class Player
             foreach (RaycastHit hit in hits)
             {
                 IDamageable d = Combat.Find(hit.collider);
-                if (d == null) { to = hit.point; Fx.Burst(hit.point + hit.normal * 0.05f, c, 10, 4f, 0.07f, 0.35f); break; }   // a wall stops it
+                if (d == null)
+                {
+                    if (g.wallPierce) { Fx.Burst(hit.point, c, 4, 2f, 0.05f, 0.25f); continue; }       // X-ray: straight through walls
+                    to = hit.point; Fx.Burst(hit.point + hit.normal * 0.05f, c, 10, 4f, 0.07f, 0.35f); break;   // a wall stops it
+                }
                 if (done.Contains(d)) continue;
                 done.Add(d);
                 if (!Teams.Hostile(Team, d.Team)) { to = hit.point; break; }     // your own lab's wall stops it
@@ -370,23 +468,46 @@ public partial class Player
                 {
                     Strike(d, g, g.damage * (pierced == 0 ? 1f : 0.75f), hit.point, dir, el);
                     Fx.Burst(hit.point, c, 8, 4f, 0.07f, 0.3f);
+                    if (first == null) { first = d; firstPoint = hit.point; }
                     pierced++;
                 }
-                if (pierced >= 4) { to = hit.point; break; }
+                if (pierced >= 4 || (!g.pierce && pierced >= 1)) { to = hit.point; break; }
             }
         }
-        else if (Physics.Raycast(from, dir, out RaycastHit hit, len, Combat.NotPlayer, QueryTriggerInteraction.Ignore))
+        else
         {
-            to = hit.point;
-            IDamageable d = Combat.Find(hit.collider);
-            if (d != null && d.Alive && Teams.Hostile(Team, d.Team))
+            // one shot that can bounce off walls (ricochet) and pull you along (grapple)
+            float remain = len;
+            int bouncesLeft = g.ricochet;
+            bool grappled = false;
+            while (true)
             {
-                Strike(d, g, g.damage, hit.point, dir, el);
-                first = d;
-                firstPoint = hit.point;
+                if (!Physics.Raycast(from, dir, out RaycastHit hit, remain, Combat.NotPlayer, QueryTriggerInteraction.Ignore)) { to = from + dir * remain; break; }
+                to = hit.point;
+                IDamageable d = Combat.Find(hit.collider);
+                if (g.grapple && !grappled) { grappled = true; GrappleTo(hit.point); }
+                if (d != null && d.Alive && Teams.Hostile(Team, d.Team))
+                {
+                    Strike(d, g, g.damage, hit.point, dir, el);
+                    first = d;
+                    firstPoint = hit.point;
+                    Fx.Burst(hit.point + hit.normal * 0.05f, c, g.pellets > 1 ? 3 : 7, 3.5f, 0.06f, 0.3f);
+                    break;
+                }
+                if (d == null && bouncesLeft > 0)
+                {
+                    bouncesLeft--;
+                    Fx.Beam(from, hit.point, c, 0.05f, 0.1f, g.lightning);
+                    Fx.Burst(hit.point, c, 5, 3f, 0.05f, 0.25f);
+                    remain -= hit.distance;
+                    from = hit.point + hit.normal * 0.05f;
+                    dir = Vector3.Reflect(dir, hit.normal);
+                    continue;
+                }
+                if (g.hitBlast > 0f) Combat.MiniBlast(hit.point + hit.normal * 0.2f, g.hitBlast, g.damage * 0.5f, Team, el, g.structure, true, g.color);
+                Fx.Burst(hit.point + hit.normal * 0.05f, c, g.pellets > 1 ? 3 : 7, 3.5f, 0.06f, 0.3f);
+                break;
             }
-            else if (g.hitBlast > 0f) Combat.MiniBlast(hit.point + hit.normal * 0.2f, g.hitBlast, g.damage * 0.5f, Team, el, g.structure, true, g.color);
-            Fx.Burst(hit.point + hit.normal * 0.05f, c, g.pellets > 1 ? 3 : 7, 3.5f, 0.06f, 0.3f);
         }
         float width = Mathf.Clamp(g.damage / 300f, 0.025f, 0.12f) + (g.pierce ? 0.08f : 0f);
         Fx.Beam(from, to, c, width + 0.03f, g.pierce ? 0.25f : 0.08f, g.lightning);
@@ -421,9 +542,12 @@ public partial class Player
     }
 
     // Short spray you hold down (flamethrower, sap sprayer).
+    float beamFieldAt;
+
     void GunBeam(Vector3 from, Vector3 dir, GunDef g, Element el, Color c)
     {
         Vector3 to = from + dir * g.range;
+        bool landed = false;
         beamTick++;
         if (Laboratory.ShieldBlocks(from, to, Team, out Vector3 sp, out Laboratory lab))
         {
@@ -433,6 +557,7 @@ public partial class Player
         else if (Physics.SphereCast(from, 0.35f, dir, out RaycastHit hit, g.range, Combat.NotPlayer, QueryTriggerInteraction.Ignore))
         {
             to = hit.point;
+            landed = true;
             IDamageable d = Combat.Find(hit.collider);
             // every 3rd tick counts as a proper hit (puts the element on, makes them flinch); the rest just hurt
             if (d != null && d.Alive && Teams.Hostile(Team, d.Team)) Strike(d, g, g.damage, hit.point, dir, el, beamTick % 3 != 0);
@@ -446,6 +571,12 @@ public partial class Player
         }
         if (el == Element.Fire && Random.value < 0.3f) Fx.Puff(to, new Color(0.25f, 0.25f, 0.25f, 0.35f), 1, 0.2f, 0.4f, 0.8f, Vector3.up);
         Fx.Beam(from, to, new Color(c.r, c.g, c.b, 0.45f), 0.22f, 0.1f, false);
+        // 'field' beams leave a burning / freezing / poison patch where they hit
+        if (g.field > 0f && landed && Time.time >= beamFieldAt)
+        {
+            beamFieldAt = Time.time + 0.45f;
+            DamageField.Spawn(to, g.field, g.fieldTime, g.damage * 2f + 3f, el, c, Team, true, g.structure, g.blackHole);
+        }
     }
 
     void AddHeat(HeldItem h, float amount)

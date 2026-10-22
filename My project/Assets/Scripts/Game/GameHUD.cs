@@ -399,6 +399,7 @@ public partial class GameHUD : MonoBehaviour
             DrawHealth(p);
             DrawHotbar(p);
             DrawMaterials(p);
+            if (showInfo && station == null && !paused) DrawWeaponInfo(p);
             if (station == null && !paused && !book)
             {
                 DrawCrosshair(p);
@@ -562,7 +563,18 @@ public partial class GameHUD : MonoBehaviour
                 Color ec = it.EnchantColor;
                 Box(x + 4f, y + size - 10f, size - 8f, 5f, ec);
             }
+            GunDef sg = r.kind == ItemKind.Weapon ? Guns.Get(it.id) : null;
             if (r.kind != ItemKind.Weapon) Text(x, y + size - 30f, size - 8f, 26f, "x" + it.count, 18, Color.white, TextAnchor.MiddleRight);
+            else if (sg != null && sg.mag > 0)
+            {
+                // magazine guns: bullets left, or the reload bar
+                if (it.reloadLeft > 0f)
+                {
+                    Box(x + 6f, y + size - 18f, size - 12f, 5f, new Color(0f, 0f, 0f, 0.6f));
+                    Box(x + 6f, y + size - 18f, (size - 12f) * (1f - it.reloadLeft / Mathf.Max(0.01f, sg.reload)), 5f, new Color(1f, 0.85f, 0.3f));
+                }
+                else Text(x, y + size - 30f, size - 8f, 26f, (it.ammo < 0 ? sg.mag : it.ammo).ToString(), 16, it.ammo == 0 ? new Color(1f, 0.4f, 0.3f) : Color.white, TextAnchor.MiddleRight);
+            }
             else if (it.heat > 1f)
             {
                 Box(x + 6f, y + size - 18f, (size - 12f), 5f, new Color(0f, 0f, 0f, 0.6f));
@@ -576,9 +588,59 @@ public partial class GameHUD : MonoBehaviour
         {
             string n = h.R.name + (h.Enchanted ? "  ·  " + h.EnchantName : "");
             Text(x0, y - 36f, total, 30f, n, 20, h.Enchanted ? h.EnchantColor : Color.white, TextAnchor.MiddleCenter);
-            string hint = h.R.kind == ItemKind.Weapon ? "" : h.R.kind == ItemKind.Throwable ? "click to throw" : "click to drink";
+            string hint = h.R.kind == ItemKind.Weapon ? QuickStats(h, p) : h.R.kind == ItemKind.Throwable ? "click to throw" : "click to drink";
             if (hint.Length > 0) Text(x0, y - 60f, total, 24f, hint, 15, Dim, TextAnchor.MiddleCenter, false);
         }
+    }
+
+    // ---------------- weapon stats (I) ----------------
+
+    static bool showInfo;
+    public static void ToggleWeaponInfo()
+    {
+        showInfo = !showInfo;
+        Sfx.Play("tick", 0.4f);
+    }
+
+    // One short line under the weapon's name.
+    static string QuickStats(HeldItem h, Player p)
+    {
+        GunDef g0 = Guns.Get(h.id);
+        if (g0 == null) return "";
+        GunDef g = Guns.Effective(g0, h.enchantDef, p);
+        int shots = Mathf.Max(1, g.pellets) * Mathf.Max(1, g.burst);
+        string s = "DMG " + g.damage.ToString("0.#") + (shots > 1 ? " x" + shots : "");
+        s += g.mode == GunMode.Beam ? "  ·  beam" : "  ·  " + (1f / Mathf.Max(0.01f, g.cooldown)).ToString("0.0") + "/s";
+        if (g.mag > 0) s += "  ·  mag " + g.mag;
+        return s + "  ·  [I] stats";
+    }
+
+    static float RowH((string, string) row) => row.Item1 == "SPECIAL" ? 14f + 17f * Mathf.CeilToInt(row.Item2.Length / 40f) : 30f;
+
+    void DrawWeaponInfo(Player p)
+    {
+        HeldItem h = p.Held;
+        if (h == null) return;
+        Recipe r = h.R;
+        float w = 470f, x = W - w - 24f, y = 150f;
+        GunDef g0 = r.kind == ItemKind.Weapon ? Guns.Get(h.id) : null;
+        List<(string, string)> rows = g0 != null ? Guns.Stats(Guns.Effective(g0, h.enchantDef, p)) : new List<(string, string)>();
+        float h2 = 92f + 60f;
+        foreach (var row in rows) h2 += RowH(row);
+        Box(x, y, w, h2, Panel);
+        Box(x, y, w, 4f, h.Enchanted ? h.EnchantColor : r.color);
+        Icon(x + 14f, y + 14f, 56f, Items.Icon(r.icon), r.color);
+        Text(x + 80f, y + 12f, w - 90f, 30f, r.name, 22, Color.white);
+        Text(x + 80f, y + 40f, w - 90f, 40f, r.desc, 13, Dim, TextAnchor.UpperLeft, false, true);
+        float yy = y + 92f;
+        foreach (var row in rows)
+        {
+            Text(x + 16f, yy, 140f, 28f, row.Item1, 13, new Color(0.7f, 0.45f, 1f));
+            Text(x + 150f, yy + (row.Item1 == "SPECIAL" ? 6f : 0f), w - 166f, RowH(row), row.Item2, row.Item1 == "SPECIAL" ? 13 : 15, Color.white, row.Item1 == "SPECIAL" ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft, row.Item1 != "SPECIAL", true);
+            yy += RowH(row);
+        }
+        if (h.Enchanted) { Text(x + 16f, yy, w - 32f, 26f, "Enchant: " + h.EnchantName + " (included above)", 13, h.EnchantColor, TextAnchor.MiddleLeft, false); yy += 26f; }
+        Text(x + 16f, yy + 4f, w - 32f, 24f, "I to hide  ·  R reload (magazine guns)", 12, Dim, TextAnchor.MiddleLeft, false);
     }
 
     // ---------------- bottom-right: materials ----------------
@@ -639,6 +701,27 @@ public partial class GameHUD : MonoBehaviour
             Box(cx + spread, cy - 1f, 10f, 2f, c);
             Box(cx - 1f, cy - spread - 10f, 2f, 10f, c);
             Box(cx - 1f, cy + spread, 2f, 10f, c);
+            GunDef cg = Guns.Get(h.id);
+            if (cg != null && cg.charge > 0f && h.chargeT > 0f)
+            {
+                float ck = h.chargeT / cg.charge;
+                Bar(cx - 50f, cy + 30f, 100f, 7f, ck, ck >= 1f ? new Color(1f, 1f, 0.5f) : cg.color, new Color(0f, 0f, 0f, 0.5f));
+                Text(cx - 100f, cy + 40f, 200f, 22f, ck >= 1f ? "FULL CHARGE - let go!" : "CHARGING", 14, Color.white, TextAnchor.MiddleCenter);
+            }
+            if (cg != null && cg.mag > 0)
+            {
+                if (h.reloadLeft > 0f)
+                {
+                    Bar(cx - 40f, cy + 30f, 80f, 5f, 1f - h.reloadLeft / Mathf.Max(0.01f, cg.reload), new Color(1f, 0.85f, 0.3f), new Color(0f, 0f, 0f, 0.5f));
+                    Text(cx - 100f, cy + 38f, 200f, 24f, "RELOADING", 15, new Color(1f, 0.85f, 0.3f), TextAnchor.MiddleCenter);
+                }
+                else
+                {
+                    int am = h.ammo < 0 ? cg.mag : h.ammo;
+                    Text(cx + 22f, cy + 14f, 120f, 22f, am + " / " + cg.mag, 14, am <= cg.mag / 4 ? new Color(1f, 0.45f, 0.35f) : new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft);
+                    if (am == 0) Text(cx - 100f, cy + 38f, 200f, 24f, "PRESS R TO RELOAD", 14, new Color(1f, 0.45f, 0.35f), TextAnchor.MiddleCenter);
+                }
+            }
             if (h.heat > 1f)
             {
                 Bar(cx - 40f, cy + 30f, 80f, 5f, h.heat / 100f, h.overheated ? new Color(1f, 0.3f, 0.25f) : new Color(1f, 0.65f, 0.2f), new Color(0f, 0f, 0f, 0.5f));
