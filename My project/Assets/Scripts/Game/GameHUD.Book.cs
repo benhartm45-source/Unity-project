@@ -137,7 +137,7 @@ public partial class GameHUD
         foreach (Station s in BookStations)
             foreach (Recipe r in Items.For(s)) { all++; if (Discoveries.Knows(r.id)) found++; }
         float px = x + 420f, pw = w - 420f - 260f;
-        Text(px, y + 14f, pw, 30f, "DISCOVERED  " + found + " / " + all + "   (" + Mathf.FloorToInt(100f * found / Mathf.Max(1, all)) + "%)", 18, Color.white);
+        Text(px, y + 14f, pw, 30f, "DISCOVERED  " + found + " / " + all + "   (" + Mathf.FloorToInt(100f * found / Mathf.Max(1, all)) + "%)      " + LabExtras.LevelText(), 18, Color.white);
         Bar(px, y + 48f, pw, 14f, found / (float)Mathf.Max(1, all), BookGold, new Color(0f, 0f, 0f, 0.6f));
         bool pad = Gamepad.current != null;
         Text(x, y + 14f, w - 30f, 56f, pad ? "SELECT / B  close" : "B / ESC  close", 16, Dim, TextAnchor.MiddleRight);

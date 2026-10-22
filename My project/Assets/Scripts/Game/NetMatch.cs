@@ -49,6 +49,7 @@ public class NetMatch : MonoBehaviour
             w.WriteValueSafe(gm.phaseLeft);
             w.WriteValueSafe(gm.madnessTime);
             w.WriteValueSafe(gm.matchTime);
+            w.WriteValueSafe((byte)Holiday.Current);
             SendAll("clock", w, NetworkDelivery.UnreliableSequenced);
         }
         if (!decided && gm.phase == MLGame.Phase.Madness) CheckWinner(gm);
@@ -106,6 +107,8 @@ public class NetMatch : MonoBehaviour
         r.ReadValueSafe(out float phaseLeft);
         r.ReadValueSafe(out float madnessTime);
         r.ReadValueSafe(out float matchTime);
+        r.ReadValueSafe(out byte theme);
+        Holiday.FollowHost((Holiday.Theme)theme);
         MLGame.I.ApplyNetClock((MLGame.Phase)phase, phaseLeft, madnessTime, matchTime);
     }
 

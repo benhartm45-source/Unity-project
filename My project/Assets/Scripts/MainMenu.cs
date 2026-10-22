@@ -142,7 +142,7 @@ public class MainMenu : MonoBehaviour
     int RowCount()
     {
         if (screen == Screen2.Main) return 4;
-        if (screen == Screen2.Settings) return 7;
+        if (screen == Screen2.Settings) return 8;
         switch (Net.Mode)
         {
             case Net.State.Offline: return 5;      // name, host, code, join, back
@@ -212,7 +212,7 @@ public class MainMenu : MonoBehaviour
                 else QuitGame();
                 break;
             case Screen2.Settings:
-                if (row == 6) GoTo(Screen2.Main);
+                if (row == 7) GoTo(Screen2.Main);
                 else ChangeSetting(row, 1);
                 break;
             case Screen2.Coop:
@@ -253,6 +253,7 @@ public class MainMenu : MonoBehaviour
             case 2: Settings.Sensitivity = Mathf.Clamp(Settings.Sensitivity + dir * 0.25f, 0.25f, 5f); break;
             case 3: Settings.Fullscreen = !Settings.Fullscreen; break;
             case 5: Settings.FirstPerson = !Settings.FirstPerson; break;
+            case 6: Settings.Theme = (Settings.Theme + dir + 4) % 4; break;
             case 4:
                 Settings.Quality = (Settings.Quality + dir + 3) % 3;     // LOW / MEDIUM / HIGH
                 break;
@@ -489,7 +490,7 @@ public class MainMenu : MonoBehaviour
     // One settings row: label on the left, value with < > on the right (and a bar for sliders).
     void SettingRow(int row, string label, string value, float bar)
     {
-        Rect r = R(140f, 540f + row * 64f, 720f, 56f);
+        Rect r = R(140f, 532f + row * 58f, 720f, 52f);
         bool over = r.Contains(Event.current.mousePosition);
         if (over && mouseMoved) sel = row;
         bool on = sel == row;
@@ -539,7 +540,10 @@ public class MainMenu : MonoBehaviour
         int gq = Mathf.Clamp(Settings.Quality, 0, 2);
         SettingRow(4, "Graphics  (" + GraphicsQuality.Hints[gq] + ")", GraphicsQuality.Names[gq], -1f);
         SettingRow(5, "Camera", Settings.FirstPerson ? "1ST PERSON" : "3RD PERSON", -1f);
-        BackButton(6, R(140f, 540f + 6 * 64f + 8f, 240f, 56f));
+        string theme = Holiday.SettingNames[Mathf.Clamp(Settings.Theme, 0, 3)];
+        if (Settings.Theme == 0) theme += " (" + Holiday.FromSetting(0).ToString().ToUpperInvariant() + ")";
+        SettingRow(6, "Map Theme", theme, -1f);
+        BackButton(7, R(140f, 532f + 7 * 58f + 8f, 240f, 52f));
     }
 
     // ---------- Co-op ----------
@@ -746,6 +750,7 @@ public static class Settings
     public static bool Fullscreen = true;
     public static bool FirstPerson = true;      // camera: true = 1st person (default), false = 3rd person over the shoulder
     public static int Quality = -1;
+    public static int Theme = 0;                // map theme: 0 auto (by the date), 1 normal, 2 Halloween, 3 winter (Holiday.cs)
     static bool loaded;
 
     static void Load()
@@ -758,6 +763,7 @@ public static class Settings
         Fullscreen = PlayerPrefs.GetInt("set.fullscreen", 1) == 1;
         FirstPerson = PlayerPrefs.GetInt("set.firstperson", 1) == 1;
         Quality = PlayerPrefs.GetInt("set.gfx", -1);
+        Theme = Mathf.Clamp(PlayerPrefs.GetInt("set.theme", 0), 0, 3);
         if (Quality < 0 || Quality > 2) Quality = GraphicsQuality.Detect();     // first time: guess from the graphics card
     }
 
@@ -780,6 +786,7 @@ public static class Settings
         PlayerPrefs.SetInt("set.fullscreen", Fullscreen ? 1 : 0);
         PlayerPrefs.SetInt("set.firstperson", FirstPerson ? 1 : 0);
         PlayerPrefs.SetInt("set.gfx", Quality);
+        PlayerPrefs.SetInt("set.theme", Theme);
         PlayerPrefs.Save();
     }
 }

@@ -28,6 +28,14 @@ public class NetPlayers : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics() => I = null;
 
+    // Every friend's scientist: lab slot, where they are, knocked out?
+    public static void ForEach(System.Action<int, Vector3, bool> f)
+    {
+        if (I == null) return;
+        foreach (var kv in I.ghosts)
+            if (kv.Value.root != null) f(kv.Key, kv.Value.root.position, kv.Value.model != null && kv.Value.model.dead);
+    }
+
     // Is the friend in this lab slot still in the game (and are they knocked out)? Used by NetMatch to find the winner.
     public static bool Seen(int slot, out bool dead)
     {

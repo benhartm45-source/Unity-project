@@ -168,6 +168,13 @@ public class MLGame : MonoBehaviour
 
         Player.Spawn(mine, myIndex);
 
+        // Halloween / winter map (Holiday.cs) - before the lab extras so the radio picks a fitting song
+        Holiday.Begin();
+
+        // posters, lava lamps and the trophy shelf in every lab - LabDecor.cs
+        // pets, lab levels, the radio and the security screen - LabExtras.cs
+        foreach (Laboratory l in Laboratory.All) { LabDecor.Build(l); LabExtras.Build(l); }
+
         // hint scrolls: new random places (and new hints) every match - RecipeHints.cs
         HintScroll.SpawnForMatch();
 
@@ -222,6 +229,7 @@ public class MLGame : MonoBehaviour
         foreach (Projectile p in FindObjectsByType<Projectile>(FindObjectsSortMode.None)) Destroy(p.gameObject);
         foreach (ToxicCloud c in FindObjectsByType<ToxicCloud>(FindObjectsSortMode.None)) Destroy(c.gameObject);
         HintScroll.ClearAll();
+        Holiday.Cleanup();
         GameHUD.CloseAll();
     }
 
