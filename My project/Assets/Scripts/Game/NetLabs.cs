@@ -11,7 +11,7 @@ using UnityEngine;
 // damage (so their walls, forcefield and starter shield all count) and the new health comes back to you.
 // Shooting a friend's scientist works the same way: your hit is sent to them and their game takes the damage.
 // The host passes every message on to everyone else.
-public class NetLabs : MonoBehaviour
+public partial class NetLabs : MonoBehaviour
 {
     static NetLabs I;
     bool registered;
@@ -35,6 +35,7 @@ public class NetLabs : MonoBehaviour
             Register("labstate", OnLabState);
             Register("labhit", OnLabHit);
             Register("pvphit", OnPvpHit);
+            Register("ko", OnKnockout);
             registered = true;
         }
         // tell everyone how my lab is doing
@@ -210,6 +211,69 @@ public class NetLabs : MonoBehaviour
         if (me == null || me.labIndex != slot || !me.Alive) return;
         Vector3 dir = new Vector3(dx, dy, dz);
         me.TakeHit(new Hit { damage = damage, element = (Element)element, dir = dir, force = force, dot = dot, team = team, point = me.Center - dir * 2f, structureMul = 1f });
+    }
+}
+
+// ---------------- who knocked out who (free-for-all) ----------------
+public partial class NetLabs
+{
+    static string SlotName(int slot)
+    {
+        Player me = Player.Local;
+        if (me != null && me.labIndex == slot) return "You";
+        if (NetLobby.Instance != null && slot >= 0 && slot < NetLobby.Instance.Members.Count) return NetLobby.Instance.Members[slot].name;
+        return "Scientist " + (slot + 1);
+    }
+
+    // Called by the scientist who got knocked out: shows it here and tells everyone else.
+    public static void SendKnockout(int victim, int killer, bool eliminated)
+    {
+        ShowKnockout(victim, killer, eliminated);
+        if (I == null || !Net.Active) return;
+        var w = Writer();
+        w.WriteValueSafe((sbyte)victim);
+        w.WriteValueSafe((sbyte)killer);
+        w.WriteValueSafe(eliminated);
+        Send("ko", w, true);
+    }
+
+    void OnKnockout(ulong sender, FastBufferReader r)
+    {
+        r.ReadValueSafe(out sbyte victim);
+        r.ReadValueSafe(out sbyte killer);
+        r.ReadValueSafe(out bool eliminated);
+        if (NM != null && NM.IsServer)
+        {
+            var w = Writer();
+            w.WriteValueSafe(victim); w.WriteValueSafe(killer); w.WriteValueSafe(eliminated);
+            Send("ko", w, true, sender);
+        }
+        ShowKnockout(victim, killer, eliminated);
+    }
+
+    static void ShowKnockout(int victim, int killer, bool eliminated)
+    {
+        Player me = Player.Local;
+        bool iWasHit = me != null && me.labIndex == victim;
+        bool iDidIt = me != null && me.labIndex == killer;
+        string v = SlotName(victim), k = killer >= 0 ? SlotName(killer) : null;
+        Color red = new Color(1f, 0.4f, 0.35f), green = new Color(0.5f, 1f, 0.45f);
+        if (iDidIt)
+        {
+            GameHUD.HitMarker(true);
+            if (eliminated) GameHUD.Banner("ELIMINATED!", "You took " + v + " out of the game!", green);
+            else GameHUD.Toast("You knocked out " + v + "!", green);
+            return;
+        }
+        if (iWasHit)
+        {
+            if (k != null) GameHUD.Toast(k + " knocked you out!", red);
+            return;
+        }
+        // everyone else: a line in the corner
+        string line = k != null ? k + " knocked out " + v : v + " got knocked out";
+        if (eliminated) line += " - and is ELIMINATED!";
+        GameHUD.Toast(line, eliminated ? new Color(1f, 0.75f, 0.3f) : new Color(1f, 1f, 1f, 0.85f));
     }
 }
 

@@ -528,13 +528,9 @@ public static class Guns
         new GunDef { id = ItemId.VoltRevolver, mode = GunMode.Hitscan, look = GunLook.Revolver, damage = 24, cooldown = 0.55f, heat = 14, range = 80, chain = 2, lightning = true, element = Element.Shock, auto = false, sound = "zap", pitch = 0.7f, volume = 0.7f, kick = 0.9f, color = new Color(0.5f, 0.75f, 1f), body = new Color(0.362f, 0.303f, 0.239f), trim = new Color(0.862f, 0.722f, 0.568f), mag = 6, reload = 1.8f },
         new GunDef { id = ItemId.BoneCrusher, mode = GunMode.Hitscan, look = GunLook.Shotgun, damage = 20, pellets = 4, spread = 5, cooldown = 1.2f, heat = 30, range = 30, force = 14, auto = false, sound = "explode", pitch = 0.6f, volume = 0.9f, kick = 1.8f, color = new Color(0.839f, 0.611f, 0.679f), body = new Color(0.352f, 0.256f, 0.285f), trim = new Color(0.839f, 0.611f, 0.679f), selfKnock = 2.5f, mag = 4, reload = 1.6f },
         // ---- THE ULTIMATE SECRET (10 of every material) ----
-<<<<<<< Updated upstream
         new GunDef { id = ItemId.OmegaRay, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 75, cooldown = 0.28f, heat = 9, range = 320, pierce = true, chain = 4, lightning = true, hitBlast = 3.5f, lifesteal = 0.2f, crit = 0.25f, structure = 4, force = 10, element = Element.Shock, sound = "plasma_fire", pitch = 1.3f, volume = 0.8f, kick = 0.9f, color = new Color(1f, 0.25f, 0.9f), body = new Color(0.08f, 0.04f, 0.12f), trim = new Color(1f, 0.85f, 0.3f), spinUp = 1.2f },
-=======
-        new GunDef { id = ItemId.OmegaRay, mode = GunMode.Hitscan, look = GunLook.Railgun, damage = 75, cooldown = 0.28f, heat = 9, range = 320, pierce = true, chain = 4, lightning = true, hitBlast = 3.5f, lifesteal = 0.2f, crit = 0.25f, structure = 4, force = 10, element = Element.Shock, sound = "plasma_fire", pitch = 1.3f, volume = 0.8f, kick = 0.9f, color = new Color(1f, 0.25f, 0.9f), body = new Color(0.08f, 0.04f, 0.12f), trim = new Color(1f, 0.85f, 0.3f) },
         // ---- holidays ----
         new GunDef { id = ItemId.SnowballGun, mode = GunMode.Projectile, look = GunLook.Blaster, damage = 12, cooldown = 0.2f, heat = 6, speed = 36, gravity = -9, size = 0.2f, force = 4, element = Element.Ice, sound = "pop", pitch = 0.9f, volume = 0.6f, kick = 0.3f, color = new Color(0.95f, 0.98f, 1f), body = new Color(0.3f, 0.55f, 0.85f), trim = new Color(0.9f, 0.95f, 1f) },
->>>>>>> Stashed changes
     };
 
     static Dictionary<ItemId, GunDef> byId;

@@ -173,7 +173,8 @@ public class MLGame : MonoBehaviour
 
         // posters, lava lamps and the trophy shelf in every lab - LabDecor.cs
         // pets, lab levels, the radio and the security screen - LabExtras.cs
-        foreach (Laboratory l in Laboratory.All) { LabDecor.Build(l); LabExtras.Build(l); }
+        // and the yard outside every lab - LabOutside.cs
+        foreach (Laboratory l in Laboratory.All) { LabDecor.Build(l); LabExtras.Build(l); LabOutside.Build(l); }
 
         // hint scrolls: new random places (and new hints) every match - RecipeHints.cs
         HintScroll.SpawnForMatch();
